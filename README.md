@@ -1,0 +1,191 @@
+# Mise
+
+An instrumented kitchen. A recipe screen driven by a load cell, a pantry that
+tracks its own consumption, and a log that turns every meal into a data point.
+
+Built to be measured, not just used: every ingredient added is recorded as
+target-versus-actual, so the whole thing doubles as a process-capability study
+on the person operating it.
+
+---
+
+## Quick start — laptop, five minutes, no hardware
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # optional: only needed for the assistant
+uvicorn server.main:app --host 0.0.0.0 --port 8000
+```
+
+Open <http://localhost:8000>. From your phone on the same WiFi, use your
+laptop's LAN address. API docs are at `/docs`.
+
+**Start logging cooks in manual mode now, before any hardware exists.** Manual
+entry is not a placeholder — it is the control group. The manual-versus-scale
+comparison is the strongest evidence the rig was worth building, and it only
+works if manual data exists first. Twenty manual cooks is twenty data points
+you cannot go back and collect later.
+
+## Raspberry Pi
+
+```bash
+git clone <your-repo> ~/mise && cd ~/mise
+bash scripts/install-pi.sh
+```
+
+That installs a venv, registers a systemd service, and starts it on boot. The
+Pi is then reachable at `http://mise.local:8000` from anything on the network —
+set the hostname to `mise` in Raspberry Pi Imager when you flash the card.
+
+Touchscreen setup is in `scripts/kiosk.md`. Do it last.
+
+---
+
+## Architecture
+
+```
+browser (web/index.html)          one page, synchronous, no framework
+   │
+   ├── web/api.js                 the only thing that talks to the network
+   │
+   ▼
+FastAPI (server/main.py)
+   ├── server/db.py               SQLite. one file, WAL, atomic ops
+   ├── server/assistant.py        recipe import + adaptation
+   └── server/scale.py            HX711, simulated off-Pi
+```
+
+### Why SQLite and not a spreadsheet
+
+The scale writes during a cook while your phone reads the same pantry. A
+spreadsheet loses that race and there is no way to detect that it did. SQLite in
+WAL mode handles it, and CSV import/export (`/api/pantry.csv`, `/api/cooks.csv`)
+gives you the spreadsheet whenever you actually want one.
+
+### Concurrency
+
+Whole-state writes carry a `rev`. A stale rev returns **409**, the client
+refetches, replays its local settings, and retries once. That is optimistic
+concurrency control, and it is the reason two devices editing the pantry cannot
+silently overwrite each other.
+
+Two things deliberately bypass that path because they must never be lost:
+
+| Endpoint | Why it is separate |
+|---|---|
+| `POST /api/cooks` | Append-only. A logged cook is data you cannot recreate. |
+| `PATCH /api/pantry/{id}` | Single-row read-modify-write under a lock. What the scale and the intake flow use. |
+
+### Where the model is allowed to be
+
+The assistant does exactly one job: **unstructured → structured, at the edges.**
+
+It never sees a scale factor, never converts a unit, never picks a pantry id,
+never touches a number that ends up in your logs. It returns ingredient names
+and amounts as written; Python does the conversion and the matching. Its output
+is validated against `RecipeDraft` and rejected if it doesn't fit — a negative
+quantity fails the schema before it reaches the UI.
+
+That separation is the point. Everything reproducible stays in code, where it
+can be tested; the model handles only the genuinely fuzzy part.
+
+### Import tiers
+
+Cheapest and most reliable first:
+
+| Tier | Source | Model call? |
+|---|---|---|
+| 1 | `schema.org/Recipe` JSON-LD embedded in the page | no |
+| 2 | YouTube auto-subtitles via `yt-dlp` (transcript only, no video) | yes |
+| 3 | Stripped page text | yes |
+| 4 | Text you pasted | yes |
+| 5 | Local regex parser | no |
+
+Most real recipe sites publish JSON-LD, so tier 1 handles them perfectly for
+free. Tier 5 means the import form still works with no API key configured — it
+just tells you honestly that it's guessing.
+
+**Instagram and Pinterest will block a server fetch.** There is no clever way
+around it. The working path is the PWA share target: share the post from your
+phone, Mise opens with the caption prefilled, and the assistant works from that.
+
+---
+
+## API
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/state` | Everything. Includes `rev`. |
+| `PUT` | `/api/state` | Whole-state write. 409 on stale `rev`. |
+| `POST` | `/api/seed` | One-shot import of the browser prototype's blob. |
+| `PATCH` | `/api/pantry/{id}` | Atomic `delta` or `absolute`. |
+| `POST` | `/api/cooks` | Append a cook; decrements the pantry per ingredient. |
+| `GET` | `/api/pantry.csv`, `/api/cooks.csv` | Export. |
+| `GET` | `/api/barcode/{code}` | Your pantry first, then Open Food Facts. |
+| `POST` | `/api/import` | URL or text → reviewed draft. |
+| `POST` | `/api/assist/adapt` | "make it vegetarian" → a proposed diff. |
+| `GET` | `/api/assist/health` | Which tiers are actually available. |
+| `GET` | `/api/scale` | Current grams + stability. |
+| `POST` | `/api/scale/tare`, `/api/scale/calibrate` | Calibration. |
+| `WS` | `/ws/scale` | ~10 Hz live weight for the cook screen. |
+
+---
+
+## The scale
+
+`server/scale.py` runs simulated on a laptop and real on the Pi behind the same
+interface, so the UI never knows the difference and you can build everything
+before the hardware lands.
+
+Wiring (HX711 → Pi 5):
+
+| HX711 | Pi |
+|---|---|
+| VCC | 5 V (pin 2) |
+| GND | GND (pin 6) |
+| DT | GPIO 5 (pin 29) |
+| SCK | GPIO 6 (pin 31) |
+
+Calibrate:
+
+1. Empty pan → `POST /api/scale/tare`
+2. Put a known mass on → `POST /api/scale/calibrate {"grams": 500}`
+
+Stored in `data/scale.json`.
+
+**Stability detection** is standard deviation over a short window, not a bare
+threshold and not a fixed delay. A threshold fires while the pan is still
+moving; a delay is slower than it needs to be. This is the piece worth writing
+up properly — it's a real signal-processing decision with a defensible reason.
+
+Load cells drift with temperature. A hot pan on the platform will read wrong.
+Tare often, and don't design a workflow that assumes a cold start.
+
+## The tare table
+
+Don't try to weigh contents separately from packaging. Open Food Facts returns
+net quantity for most EU products, so:
+
+```
+packaging tare = gross you weigh − net from the barcode
+```
+
+Measure once per packaging type, store it on the pantry row, reuse forever. For
+anything you decant into your own jar, weigh the empty jar once and save that as
+the container's tare. It is the same table a filling line keeps.
+
+---
+
+## Roadmap
+
+- [ ] microSD card (**blocker** — the Pi will not boot without one; A2-rated 64 GB)
+- [ ] Server on the Pi, phone + laptop pointed at it
+- [ ] 20 manual cooks logged — the control group
+- [ ] `ANTHROPIC_API_KEY` set, import from a link working
+- [ ] PWA manifest + share target so Instagram can hand off to it
+- [ ] HX711 + 5 kg load cell wired, calibrated, auto mode real
+- [ ] Second low-range cell for salt and yeast
+- [ ] Barcode scanning from the phone camera (ZXing fallback for iOS Safari)
+- [ ] Modal survey of the scale platform, then the isolation mount and filter
+- [ ] DSI touchscreen in kiosk mode

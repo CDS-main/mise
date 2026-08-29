@@ -1,0 +1,1374 @@
+<title>Mise</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#141210">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --bg:#FAF7F1;--panel:#FFFFFF;--panel-2:#F1ECE3;--panel-3:#E7E0D3;
+  --line:#E2DCD0;--line-2:#CFC7B7;--fg:#1A1713;--fg-2:#5F584D;--fg-3:#918876;
+  --amber:#B67514;--amber-bg:#FBF0DC;--green:#2F7A52;--green-bg:#E2F0E7;
+  --red:#B44334;--red-bg:#FAE6E2;--blue:#2A6076;--blue-bg:#E2EFF4;
+  --c1:#B67514;--c2:#2E5FC0;--c3:#A8437E;--grid:#EDE7DC;
+  --sh:0 1px 2px rgba(26,23,19,.05),0 12px 28px -20px rgba(26,23,19,.3);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#141210;--panel:#1E1B17;--panel-2:#272320;--panel-3:#332E28;
+    --line:#332E28;--line-2:#474038;--fg:#F3EFE8;--fg-2:#A79E90;--fg-3:#786F62;
+    --amber:#E8A33D;--amber-bg:#332711;--green:#5CC98E;--green-bg:#13291D;
+    --red:#E87562;--red-bg:#331915;--blue:#6FB6CE;--blue-bg:#122831;
+    --c1:#B8842B;--c2:#5480D0;--c3:#B86395;--grid:#2B2622;
+    --sh:0 1px 2px rgba(0,0,0,.5),0 12px 28px -20px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141210;--panel:#1E1B17;--panel-2:#272320;--panel-3:#332E28;
+  --line:#332E28;--line-2:#474038;--fg:#F3EFE8;--fg-2:#A79E90;--fg-3:#786F62;
+  --amber:#E8A33D;--amber-bg:#332711;--green:#5CC98E;--green-bg:#13291D;
+  --red:#E87562;--red-bg:#331915;--blue:#6FB6CE;--blue-bg:#122831;
+  --c1:#B8842B;--c2:#5480D0;--c3:#B86395;--grid:#2B2622;
+  --sh:0 1px 2px rgba(0,0,0,.5),0 12px 28px -20px rgba(0,0,0,.9);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Archivo,system-ui,sans-serif;
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:"Bricolage Grotesque",Archivo,sans-serif;margin:0;line-height:1.12;text-wrap:balance}
+h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
+h3{font-size:1rem;font-weight:600}
+p{margin:0}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer;border:none;background:none}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:5px}
+input,select,textarea{background:var(--panel-2);border:1px solid var(--line-2);border-radius:7px;padding:8px 10px}
+textarea{width:100%;min-height:130px;font-size:.86rem;line-height:1.55;resize:vertical}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.app{max-width:860px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);
+  border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--line);
+  background:var(--panel);position:sticky;top:0;z-index:30}
+.brand{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.15rem;letter-spacing:-.02em}
+.brand span{color:var(--amber)}
+.bell{margin-left:auto;position:relative}
+.bell>button{font-size:.7rem;font-family:"JetBrains Mono",monospace;letter-spacing:.06em;text-transform:uppercase;
+  padding:5px 10px;border-radius:999px;background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber);font-weight:600}
+.bellpop{display:none;position:absolute;right:0;top:32px;width:264px;background:var(--panel);border:1px solid var(--line-2);
+  border-radius:9px;box-shadow:var(--sh);padding:12px;z-index:40}
+.bell:hover .bellpop,.bell:focus-within .bellpop{display:block}
+nav{display:flex;gap:2px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);
+  position:sticky;top:55px;z-index:29;overflow-x:auto}
+nav button{padding:8px 13px;border-radius:999px;font-size:.83rem;font-weight:600;color:var(--fg-2);white-space:nowrap}
+nav button[aria-selected="true"]{background:var(--fg);color:var(--bg)}
+main{padding:22px 18px 100px;flex:1}
+.view{display:none;flex-direction:column;gap:20px}.view.on{display:flex}
+.eyebrow{font-family:"JetBrains Mono",monospace;font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-3)}
+.sub{color:var(--fg-2);font-size:.92rem}
+.note{font-size:.79rem;color:var(--fg-3)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh)}
+.pad{padding:17px}
+.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.between{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:13px}
+.col-sm{display:flex;flex-direction:column;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:6px 12px;border-radius:999px;border:1px solid var(--line-2);font-size:.81rem;font-weight:500;
+  color:var(--fg-2);background:var(--panel)}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn{padding:11px 18px;border-radius:9px;font-weight:600;font-size:.92rem;background:var(--fg);color:var(--bg)}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line-2)}
+.btn.amber{background:var(--amber);color:#14120F}
+.btn.wide{width:100%;text-align:center}
+.btn.sm{padding:6px 11px;font-size:.79rem;border-radius:7px}
+.reels{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px}
+.reel{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.reel-cap{display:flex;align-items:center;justify-content:space-between;padding:7px 9px 2px;gap:4px}
+.reel-cap b{font-family:"JetBrains Mono",monospace;font-size:.56rem;letter-spacing:.11em;text-transform:uppercase;color:var(--fg-3);font-weight:400}
+.pin{font-size:.54rem;font-family:"JetBrains Mono",monospace;letter-spacing:.07em;text-transform:uppercase;
+  padding:2px 5px;border-radius:4px;color:var(--fg-3);border:1px solid transparent}
+.pin[aria-pressed="true"]{color:var(--amber);background:var(--amber-bg);border-color:var(--amber)}
+.win{height:46px;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent,#000 28%,#000 72%,transparent);
+  mask-image:linear-gradient(180deg,transparent,#000 28%,#000 72%,transparent)}
+.strip div{height:46px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 5px;
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:.86rem;line-height:1.05}
+.reel-ctl{display:flex;border-top:1px solid var(--line)}
+.reel-ctl button{flex:1;padding:6px;font-size:.62rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--fg-3);font-family:"JetBrains Mono",monospace}
+.reel-ctl button:hover{color:var(--fg);background:var(--panel-3)}
+.reel-ctl button+button{border-left:1px solid var(--line)}
+.reel select{width:100%;border:none;border-radius:0;background:var(--panel-3);font-size:.74rem;padding:6px 8px}
+.sug{display:grid;grid-template-columns:5px 1fr;overflow:hidden;text-align:left;width:100%;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh)}
+.sug .edge{background:var(--line-2)}
+.sug.ready .edge{background:var(--green)}
+.sug.hot .edge{background:var(--amber)}
+.sug-in{padding:14px 16px;display:flex;flex-direction:column;gap:9px}
+.tags{display:flex;gap:5px;flex-wrap:wrap}
+.tag{font-family:"JetBrains Mono",monospace;font-size:.59rem;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 6px;border-radius:4px;background:var(--panel-2);color:var(--fg-2);font-weight:600}
+.tag.a{background:var(--amber-bg);color:var(--amber)}
+.tag.g{background:var(--green-bg);color:var(--green)}
+.tag.r{background:var(--red-bg);color:var(--red)}
+.tag.b{background:var(--blue-bg);color:var(--blue)}
+.tag.miss{background:transparent;border:1px dashed var(--line-2);color:var(--fg-3)}
+.meter{height:5px;background:var(--panel-2);border-radius:99px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--green);border-radius:99px}
+.meter i.part{background:var(--amber)}
+.why{font-size:.78rem;color:var(--fg-2)}
+.peek{display:none;border-top:1px dashed var(--line-2);margin-top:4px;padding-top:11px;gap:9px;flex-direction:column}
+.sug:hover .peek,.sug:focus-within .peek,.sug.open .peek{display:flex}
+.peekgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:540px){.peekgrid{grid-template-columns:1fr}}
+.peek ul{margin:0;padding-left:16px;font-size:.78rem;color:var(--fg-2);line-height:1.55}
+.peek li.miss{color:var(--red)}
+.stars{color:var(--amber);letter-spacing:1px;font-size:.85rem}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:11px}
+.st{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:13px;display:flex;flex-direction:column;gap:8px}
+.st.locked{opacity:.5}
+.st.running{border-color:var(--amber);background:var(--amber-bg)}
+.st.done{border-color:var(--green);opacity:.72}
+.st.focus{outline:2px solid var(--fg);outline-offset:-2px}
+.st .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.st h3{font-size:.93rem}
+.st .mt{font-family:"JetBrains Mono",monospace;font-size:.7rem;color:var(--fg-2)}
+.vessel{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:.57rem;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 6px;border-radius:4px;background:var(--blue-bg);color:var(--blue);font-weight:600}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:19px;box-shadow:var(--sh)}
+.readout{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.04em;
+  font-size:clamp(2.8rem,13vw,4.4rem);line-height:.95;font-variant-numeric:tabular-nums}
+.readout small{font-size:.28em;font-weight:600;color:var(--fg-3);margin-left:.14em}
+.target{font-family:"JetBrains Mono",monospace;font-size:.78rem;color:var(--fg-2)}
+.leds{display:flex;gap:3px;height:13px;margin:12px 0}
+.leds i{flex:1;background:var(--panel-2);border-radius:2px}
+.pourbtn{width:100%;padding:20px;border-radius:11px;background:var(--panel-2);border:1px dashed var(--line-2);
+  font-weight:700;color:var(--fg-2);user-select:none;touch-action:none}
+.pourbtn.on{background:var(--amber);color:#14120F;border-style:solid;border-color:var(--amber)}
+.station{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:.57rem;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 6px;border-radius:4px;background:var(--panel-3);color:var(--fg-2);font-weight:600}
+.tipbox{margin-top:13px;padding:11px 13px;border-radius:9px;background:var(--panel-2);border-left:3px solid var(--blue);
+  font-size:.82rem;color:var(--fg-2);min-height:52px;display:flex;align-items:center;gap:9px}
+.tipbox b{font-family:"JetBrains Mono",monospace;font-size:.57rem;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);flex:none}
+.clock{font-family:"JetBrains Mono",monospace;font-size:1.05rem;font-weight:600;font-variant-numeric:tabular-nums}
+.steplist{display:flex;flex-direction:column;gap:1px;background:var(--line);border-radius:9px;overflow:hidden;border:1px solid var(--line)}
+.stp{background:var(--panel);padding:10px 13px;display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;font-size:.86rem}
+.stp.now{background:var(--amber-bg)}.stp.done{color:var(--fg-3)}
+.stp .n{font-family:"JetBrains Mono",monospace;font-size:.68rem;color:var(--fg-3)}
+.stp .g{font-family:"JetBrains Mono",monospace;font-size:.74rem;color:var(--fg-2)}
+.tw{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh)}
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+th{text-align:left;font-family:"JetBrains Mono",monospace;font-size:.6rem;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--fg-3);padding:11px 11px 7px;font-weight:400;white-space:nowrap}
+td{padding:9px 11px;border-top:1px solid var(--line);vertical-align:middle}
+td.n{font-family:"JetBrains Mono",monospace;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+tr.warn td{background:var(--amber-bg)}tr.bad td{background:var(--red-bg)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
+.shopitem{display:grid;grid-template-columns:auto 1fr auto;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.shopitem:last-child{border-bottom:none}
+.shopitem input[type=checkbox]{width:19px;height:19px;accent-color:var(--amber)}
+.nl{font-style:italic;color:var(--fg-3);font-size:.82rem}
+.chartcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh);padding:17px}
+.charthead{display:flex;flex-direction:column;gap:3px;margin-bottom:12px}
+.charthead h3{font-size:.96rem}
+.legend{display:flex;gap:13px;flex-wrap:wrap;margin-top:11px;font-size:.75rem;color:var(--fg-2)}
+.legend span{display:flex;align-items:center;gap:6px}
+.swatch{width:11px;height:11px;border-radius:3px;flex:none}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:11px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px;box-shadow:var(--sh)}
+.tile .v{font-family:"Bricolage Grotesque",sans-serif;font-size:1.7rem;font-weight:800;letter-spacing:-.03em;
+  line-height:1;font-variant-numeric:tabular-nums;display:block}
+.tile .k{font-family:"JetBrains Mono",monospace;font-size:.59rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-top:7px;display:block}
+svg{display:block;max-width:100%;overflow:visible}
+.gl{stroke:var(--grid);stroke-width:1}
+.ax{fill:var(--fg-3);font-family:"JetBrains Mono",monospace;font-size:9.5px}
+.dl{fill:var(--fg-2);font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:500}
+.hit{fill:transparent;cursor:pointer}
+.empty{padding:32px 18px;text-align:center;color:var(--fg-3);font-size:.87rem}
+.banner{padding:12px 15px;border-radius:9px;background:var(--amber-bg);border:1px solid var(--amber);
+  font-size:.85rem;display:flex;gap:11px;align-items:center;flex-wrap:wrap}
+.banner.blue{background:var(--blue-bg);border-color:var(--blue)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(150%);background:var(--fg);color:var(--bg);
+  padding:12px 20px;border-radius:9px;font-weight:600;font-size:.85rem;z-index:70;
+  transition:transform .3s cubic-bezier(.2,.9,.3,1.2);box-shadow:var(--sh);max-width:88vw;text-align:center}
+.toast.up{transform:translateX(-50%) translateY(0)}
+.tip{position:fixed;pointer-events:none;background:var(--fg);color:var(--bg);padding:7px 10px;border-radius:6px;
+  font-size:.74rem;font-family:"JetBrains Mono",monospace;z-index:80;opacity:0;transition:opacity .12s;white-space:pre;line-height:1.45}
+.tip.on{opacity:1}
+.rate{display:grid;grid-template-columns:auto 1fr auto;gap:11px;align-items:center;padding:7px 0}
+.rate input[type=range]{accent-color:var(--amber)}
+@media(max-width:540px){main{padding:17px 13px 90px}.tiles{grid-template-columns:1fr 1fr}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="app">
+  <div class="bar"><div class="brand">mise<span>.</span></div><div class="bell" id="bell"></div></div>
+  <nav role="tablist">
+    <button role="tab" aria-selected="true" data-v="decide">Decide</button>
+    <button role="tab" aria-selected="false" data-v="cook">Cook</button>
+    <button role="tab" aria-selected="false" data-v="book">Recipe book</button>
+    <button role="tab" aria-selected="false" data-v="pantry">Pantry</button>
+    <button role="tab" aria-selected="false" data-v="shop">Shop</button>
+    <button role="tab" aria-selected="false" data-v="hub">Data</button>
+  </nav>
+  <main>
+    <section class="view on" id="v-decide"></section>
+    <section class="view" id="v-cook"></section>
+    <section class="view" id="v-book"></section>
+    <section class="view" id="v-pantry"></section>
+    <section class="view" id="v-shop"></section>
+    <section class="view" id="v-hub"></section>
+  </main>
+</div>
+<div class="toast" id="toast"></div><div class="tip" id="tip"></div>
+
+<script src="api.js"></script>
+<script>
+"use strict";
+const DAY=86400000, today=new Date(2026,7,27);
+const d=n=>new Date(today.getTime()+n*DAY), days=x=>Math.round((new Date(x)-today)/DAY);
+const iso=dt=>dt.toISOString().slice(0,10), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const CLASSES={dust:"Dust",grain:"Grains",liquid:"Liquids",fat:"Fats & oils",dairy:"Dairy",
+  protein:"Protein",produce:"Produce",condiment:"Condiments",sweetener:"Sweeteners",spice:"Spices",leavening:"Leavening"};
+const TASTES=["Savoury","Sweet","Sour","Salty","Bitter","Umami"];
+const MEALS=["Breakfast","Brunch","Lunch","Dinner","Snack"];
+const CUISINES=["Italian","Korean","Japanese","Chinese","Middle Eastern","American","Spanish"];
+const THEMES=["Studio Ghibli","Adventure Time","Regular Show","Flapjack","Chowder",
+  "King of the Hill","SpongeBob","ALF","Fraggle Rock","Other…"];
+const VESSELS={"Bench":["Mixing bowl","Board"],"Stove top":["Saucepan","Frying pan","Stock pot"],
+ "Oven":["Sheet tray","Loaf tin","Baking dish","Lidded pot"],"Fry":["Deep pan"],
+ "Microwave":["Micro-safe bowl"],"Hot water":["Kettle","Heatproof jar"],
+ "Sous vide":["Water bath"],"Mixer":["Mixer bowl"],"Blend":["Blender jug"]};
+const APPLIANCES=[{id:"bench",name:"Bench",medium:"Bench",have:true},
+ {id:"stove",name:"Stove top",medium:"Stove top",have:true},
+ {id:"oven",name:"Oven",medium:"Oven",have:true},
+ {id:"micro",name:"Microwave",medium:"Microwave",have:true},
+ {id:"kettle",name:"Kettle",medium:"Hot water",have:true},
+ {id:"fryer",name:"Deep pan / fry",medium:"Fry",have:true},
+ {id:"sousvide",name:"Sous vide rig",medium:"Sous vide",have:false},
+ {id:"mixer",name:"Stand mixer",medium:"Mixer",have:false},
+ {id:"blender",name:"Blender",medium:"Blend",have:false}];
+const DEFAULT_KIT={"Mixing bowl":3,"Board":1,"Saucepan":2,"Frying pan":1,"Stock pot":1,"Sheet tray":1,
+ "Loaf tin":1,"Baking dish":1,"Lidded pot":1,"Deep pan":1,"Micro-safe bowl":1,"Kettle":1,
+ "Heatproof jar":2,"Water bath":0,"Mixer bowl":0,"Blender jug":0};
+
+const SEED=[
+["bread-flour","Bread flour","Broodbloem","dry","flour","dust",1200,"g",0,-21,180,400,"flour",1.35,1000],
+["ap-flour","All-purpose flour","Patentbloem","dry","flour","dust",800,"g",0,-21,150,300,"flour",1.15,1000],
+["panko","Panko","Panko paneermeel","dry","crumb","dust",0,"g",0,0,180,100,"crumb",2.20,300],
+["yeast","Instant yeast","Gedroogde gist","dry","leavening","leavening",90,"g",0,-40,300,20,"leavening",1.80,100],
+["bp","Baking powder","Bakpoeder","dry","leavening","leavening",120,"g",0,-30,200,40,"leavening",1.10,150],
+["sugar","Caster sugar","Fijne kristalsuiker","dry","sugar","sweetener",500,"g",0,-60,540,150,"sugar",1.05,1000],
+["honey","Honey","Honing","condiment","syrup","sweetener",300,"g",0,-90,900,80,"sugar",3.40,450],
+["salt","Sea salt","Zeezout","dry","seasoning","spice",900,"g",0,-60,900,200,"seasoning",0.90,1000],
+["pepper","Black pepper","Zwarte peper","dry","seasoning","spice",60,"g",0,-90,700,15,"seasoning",2.30,100],
+["spaghetti","Spaghetti","Spaghetti","dry","pasta","grain",500,"g",0,-14,700,200,"pasta",1.25,500],
+["rice","Short-grain rice","Rondkorrelrijst","dry","rice","grain",1800,"g",0,-30,500,300,"grain",2.60,1000],
+["oats","Rolled oats","Havermout","dry","cereal","grain",900,"g",0,-25,300,200,"grain",1.40,1000],
+["olive-oil","Olive oil","Olijfolie","oil","oil","fat",700,"ml",0,-30,240,200,"oil",5.50,750],
+["sesame-oil","Sesame oil","Sesamolie","oil","oil","fat",100,"ml",0,-50,300,40,"oil",3.90,250],
+["soy","Soy sauce","Sojasaus","condiment","sauce","condiment",300,"ml",0,-50,400,80,"sauce",2.10,500],
+["vinegar","Rice vinegar","Rijstazijn","condiment","acid","condiment",200,"ml",0,-50,500,60,"acid",2.40,500],
+["gochujang","Gochujang","Gochujang","condiment","paste","condiment",0,"g",0,0,400,80,"paste",4.60,500],
+["tomatoes","Canned tomatoes","Tomatenblokjes","canned","tomato","produce",800,"g",0,-20,600,400,"tomato",0.95,400],
+["stock","Chicken stock","Kippenbouillon","canned","stock","liquid",0,"ml",0,0,300,300,"stock",1.90,1000],
+["milk","Whole milk","Volle melk","dairy","milk","dairy",900,"ml",0,-8,10,300,"milk",1.30,1000],
+["yogurt","Greek yogurt","Griekse yoghurt","dairy","cultured","dairy",400,"g",0,-18,21,150,"cultured",2.10,500],
+["butter","Butter","Roomboter","dairy","fat","dairy",220,"g",0,-48,60,80,"solid-fat",2.80,250],
+["parmesan","Parmesan","Parmezaanse kaas","dairy","hard cheese","dairy",150,"g",0,-34,60,50,"cheese-hard",4.50,200],
+["eggs","Eggs","Eieren","protein","egg","protein",6,"ea",1,-23,28,3,"egg",2.40,10],
+["chicken","Chicken thighs","Kippendijen","protein","poultry","protein",500,"g",0,-3,5,250,"meat",5.20,500],
+["onion","Yellow onion","Gele ui","produce","allium","produce",3,"ea",1,-26,40,1,"allium",0.90,3],
+["garlic","Garlic cloves","Knoflook","produce","allium","produce",9,"ea",1,-40,60,3,"allium",0.75,12],
+["scallion","Scallions","Lente-ui","produce","allium","produce",5,"ea",1,-8,12,2,"allium",1.10,6],
+["basil","Fresh basil","Verse basilicum","produce","herb","produce",20,"g",0,-4,7,10,"herb",1.60,25],
+["lemon","Lemon","Citroen","produce","fruit","produce",2,"ea",1,-15,25,1,"citrus",0.60,2],
+["potato","Potatoes","Aardappelen","produce","root","produce",0,"g",0,0,25,300,"root",1.70,1500],
+["mushrooms","Chestnut mushrooms","Kastanjechampignons","produce","fungus","produce",0,"g",0,0,6,200,"fungus",1.90,400]];
+
+const BASE_RATE={"bread-flour":22,"ap-flour":14,"rice":30,"oats":18,"spaghetti":24,"milk":110,
+ "yogurt":22,"eggs":.7,"chicken":45,"olive-oil":14,"butter":6,"parmesan":4,"onion":.25,"garlic":.6,
+ "scallion":.4,"basil":2.5,"lemon":.12,"tomatoes":38,"sugar":9,"salt":3,"honey":4,"soy":5,
+ "vinegar":2,"sesame-oil":1.2,"yeast":1.1,"bp":1.4,"pepper":.5,"potato":40,"mushrooms":18,
+ "panko":6,"gochujang":5,"stock":30};
+
+const G=(id,amt,o={})=>({id,amt,station:"prep",...o});
+const ST=(id,name,medium,vessel,needs,ing,steps)=>({id,name,medium,vessel,needs,ing,steps});
+const RC=(id,name,cuisine,meal,taste,mins,themes,basis,stages)=>({id,name,cuisine,meal,taste,mins,themes,basis,stages});
+
+const BUILTIN=[
+RC("focaccia","Rosemary focaccia","Italian","Dinner","Savoury",150,["Studio Ghibli","Chowder"],"bread-flour",[
+ ST("dry","Dry bowl","Bench","Mixing bowl",[],
+  [G("bread-flour",500,{station:"dry"}),G("yeast",4,{station:"dry"}),G("salt",10,{station:"dry"})],
+  [{t:"Whisk the dry ingredients thoroughly.",mins:1}]),
+ ST("wet","Wet bowl","Bench","Mixing bowl",[],[G("olive-oil",60,{station:"wet"})],
+  [{t:"Oil and 380 ml water, ready to go in.",mins:1}]),
+ ST("mix","Mix and fold","Bench","Mixing bowl",["dry","wet"],[],
+  [{t:"Combine to a shaggy mass, rest 30 minutes.",mins:30,tip:"This rest is an autolyse — the flour hydrates and does gluten work you'd otherwise knead in."},
+   {t:"Three sets of folds, 30 minutes apart.",mins:90,tip:"Wet your hands, not the dough. Adding flour changes your hydration and invalidates the record."},
+   {t:"Cold proof 12–18 hours.",mins:15}]),
+ ST("bake","Bake","Oven","Sheet tray",["mix"],[],
+  [{t:"Preheat to 220 °C with the tray inside.",mins:15,tip:"A cold tray is why home focaccia comes out pale underneath."},
+   {t:"Dimple hard, oil generously, bake 22 minutes.",mins:22},
+   {t:"Flaky salt and rosemary.",mins:1,optional:true}])]),
+RC("cacio","Cacio e pepe","Italian","Dinner","Salty",15,["Regular Show","King of the Hill"],"spaghetti",[
+ ST("pasta","Boil pasta","Stove top","Stock pot",[],[G("spaghetti",200,{station:"pan",subs:["oats"]})],
+  [{t:"Boil in the least water that covers.",mins:9,tip:"Starch concentration is the mechanism. More water means a thinner emulsion and a broken sauce."}]),
+ ST("pep","Toast pepper","Stove top","Frying pan",[],[G("pepper",6)],
+  [{t:"Toast the pepper dry until it smells sharp.",mins:2}]),
+ ST("sauce","Emulsify","Bench","Mixing bowl",["pasta","pep"],[G("parmesan",90)],
+  [{t:"Off the heat, beat cheese with pasta water, then add pasta.",mins:3,tip:"Off the heat is not optional. Above ~65 °C the proteins seize and you get strings."}])]),
+RC("pomodoro","Pasta al pomodoro","Italian","Dinner","Umami",30,["Regular Show","Chowder"],"spaghetti",[
+ ST("sauce","Sauce","Stove top","Saucepan",[],
+  [G("olive-oil",30,{station:"pan"}),G("garlic",3,{integer:true}),G("tomatoes",400,{station:"pan"})],
+  [{t:"Bloom sliced garlic in cold oil brought up slowly.",mins:4,tip:"Cold-start garlic gives sweetness. Into hot oil it turns bitter in about nine seconds."},
+   {t:"Tomatoes in, simmer 20 minutes until the colour deepens.",mins:20}]),
+ ST("pasta","Boil pasta","Stove top","Stock pot",[],[G("spaghetti",200,{station:"pan"})],
+  [{t:"Salted water, one minute under the packet.",mins:9}]),
+ ST("fin","Finish","Stove top","Saucepan",["sauce","pasta"],[G("basil",12,{optional:true})],
+  [{t:"Finish the pasta in the sauce, basil off the heat.",mins:2}])]),
+RC("shakshuka","Shakshuka","Middle Eastern","Brunch","Umami",35,["Studio Ghibli","Chowder"],"tomatoes",[
+ ST("base","Base","Stove top","Frying pan",[],
+  [G("olive-oil",25,{station:"pan"}),G("onion",1,{integer:true}),G("garlic",2,{integer:true}),G("tomatoes",400,{station:"pan"})],
+  [{t:"Soften onion and garlic until translucent, not coloured.",mins:8},
+   {t:"Tomatoes in, reduce 15 minutes until a spoon leaves a trail.",mins:15,tip:"The spoon-trail test is your doneness gate. Too loose and the eggs sink and overcook."}]),
+ ST("eggs","Eggs in","Stove top","Frying pan",["base"],[G("eggs",3,{station:"direct",integer:true})],
+  [{t:"Make wells, crack eggs in, cover until the whites just set.",mins:7}])]),
+RC("flatbread","Yogurt flatbread","Middle Eastern","Snack","Savoury",25,["Flapjack","Adventure Time"],"ap-flour",[
+ ST("dough","Dough","Bench","Mixing bowl",[],
+  [G("ap-flour",250,{station:"dry"}),G("bp",6,{station:"dry"}),G("salt",4,{station:"dry"}),G("yogurt",200,{station:"wet",subs:["milk"]})],
+  [{t:"Bring together, knead 3 minutes, rest 15.",mins:18,tip:"The rest lets gluten relax. Skip it and the dough springs back every time you roll."},
+   {t:"Roll thin — thinner than feels right.",mins:5}]),
+ ST("cook","Blister","Stove top","Frying pan",["dough"],[],[{t:"Dry pan, 90 seconds a side.",mins:6}])]),
+RC("pancakes","Buttermilk-style pancakes","American","Breakfast","Sweet",25,["Adventure Time","King of the Hill","Regular Show","ALF","SpongeBob"],"ap-flour",[
+ ST("dry","Dry bowl","Bench","Mixing bowl",[],
+  [G("ap-flour",200,{station:"dry"}),G("sugar",25,{station:"dry"}),G("bp",8,{station:"dry"}),G("salt",3,{station:"dry"})],
+  [{t:"Whisk dry thoroughly before anything wet touches it.",mins:2,tip:"Leavening distribution is why. An unmixed pocket of baking powder is a bitter bite and a flat spot."}]),
+ ST("wet","Wet bowl","Bench","Mixing bowl",[],
+  [G("milk",240,{station:"wet"}),G("eggs",2,{station:"wet",integer:true}),G("butter",40,{station:"wet"})],
+  [{t:"Melt the butter, whisk into milk and eggs.",mins:3}]),
+ ST("batter","Combine and rest","Bench","Mixing bowl",["dry","wet"],[],
+  [{t:"Combine until barely mixed — lumps are correct.",mins:1,tip:"Overmixing develops gluten and gives you rubber. Stop while it still looks wrong."},
+   {t:"Rest 10 minutes so the flour hydrates.",mins:10}]),
+ ST("griddle","Griddle","Stove top","Frying pan",["batter"],[G("honey",30,{optional:true})],
+  [{t:"Medium heat, flip when edges set and bubbles hold open.",mins:10},{t:"Honey over the top.",mins:1,optional:true}])]),
+RC("cake","Lemon olive oil cake","Italian","Snack","Sweet",70,["Studio Ghibli","Flapjack"],"ap-flour",[
+ ST("dry","Dry bowl","Bench","Mixing bowl",[],
+  [G("ap-flour",220,{station:"dry"}),G("bp",8,{station:"dry"}),G("salt",2,{station:"dry"})],
+  [{t:"Whisk and set aside.",mins:1}]),
+ ST("wet","Ribbon the eggs","Bench","Mixing bowl",[],
+  [G("sugar",180,{station:"wet"}),G("eggs",3,{station:"wet",integer:true}),G("olive-oil",140,{station:"wet"}),
+   G("yogurt",100,{station:"wet",subs:["milk"]}),G("lemon",2,{integer:true})],
+  [{t:"Whisk eggs and sugar to a pale ribbon — three full minutes.",mins:3,tip:"The ribbon stage is aeration you can't add later. If it doesn't fall in a visible trail, keep going."},
+   {t:"Stream the oil in slowly to hold the emulsion.",mins:3}]),
+ ST("bake","Bake","Oven","Loaf tin",["dry","wet"],[],
+  [{t:"Preheat to 170 °C.",mins:12},{t:"Fold dry alternately with yogurt, ending on dry.",mins:3},
+   {t:"45 minutes, skewer with a few crumbs.",mins:45}])]),
+RC("congee","Chicken congee","Chinese","Breakfast","Umami",80,["Studio Ghibli","Chowder"],"rice",[
+ ST("pot","Congee","Stove top","Stock pot",[],[G("rice",150,{station:"pan"})],
+  [{t:"Rice to water 1:9. Bring up, then barely simmer 60 minutes.",mins:62,tip:"1:9 is the whole recipe. Log it — congee is one of the few dishes where hydration is everything."}]),
+ ST("poach","Poach chicken","Stove top","Stock pot",["pot"],[G("chicken",250,{station:"pan",subs:["eggs"]})],
+  [{t:"Poach in the congee for the last 20 minutes, then shred.",mins:20}]),
+ ST("garnish","Garnish","Bench","Board",["poach"],
+  [G("scallion",3,{integer:true,optional:true}),G("soy",20),G("sesame-oil",8),G("garlic",2,{integer:true})],
+  [{t:"Season, scallions and sesame oil on top.",mins:3,optional:true}])]),
+RC("dakgalbi","Dakgalbi","Korean","Dinner","Savoury",40,["Adventure Time"],"chicken",[
+ ST("mar","Marinade","Bench","Mixing bowl",[],
+  [G("gochujang",60,{station:"wet"}),G("soy",20,{station:"wet"}),G("sesame-oil",10,{station:"wet"}),
+   G("garlic",3,{station:"wet",integer:true}),G("sugar",15,{station:"wet"}),G("chicken",400)],
+  [{t:"Marinate the chicken 20 minutes.",mins:20}]),
+ ST("sear","Sear","Stove top","Frying pan",["mar"],[G("scallion",3,{integer:true})],
+  [{t:"Hard sear, then cover and let it finish through.",mins:14,tip:"Sugar in the marinade means it will catch. Sear hot and briefly, then drop the heat and lid it."},
+   {t:"Scallions and sesame oil at the very end.",mins:1,optional:true}])]),
+RC("katsu","Chicken katsu","Japanese","Dinner","Savoury",45,["Studio Ghibli","ALF"],"chicken",[
+ ST("prep","Butterfly","Bench","Board",[],[G("chicken",400)],
+  [{t:"Butterfly and pound to even thickness.",mins:8,tip:"Even thickness beats every other variable in frying. Thick and thin in one pan means raw and burnt in one pan."}]),
+ ST("bread","Breading line","Bench","Mixing bowl",["prep"],
+  [G("ap-flour",60,{station:"dry"}),G("eggs",2,{station:"wet",integer:true}),G("panko",120,{station:"dry"})],
+  [{t:"Flour, egg, panko — press the crumb on firmly.",mins:7}]),
+ ST("oil","Heat the oil","Fry","Deep pan",[],[],
+  [{t:"Bring the oil to 170 °C while you bread.",mins:8,tip:"Start this before the breading — it runs in parallel and oil takes longer to come up than you think."}]),
+ ST("fry","Fry","Fry","Deep pan",["bread","oil"],[],
+  [{t:"3 minutes a side.",mins:7},{t:"Rest on a rack, never a plate.",mins:2,tip:"A plate traps steam and softens the crust you just built."}])]),
+RC("risotto","Mushroom risotto","Italian","Dinner","Umami",50,["Chowder","Fraggle Rock"],"rice",[
+ ST("stock","Warm the stock","Stove top","Saucepan",[],[G("stock",900,{station:"wet"})],
+  [{t:"Hold at a bare simmer the whole time.",mins:5,tip:"Cold stock drops the pan temperature every ladle and stalls the starch release. That's why it's a separate pan."}]),
+ ST("mush","Brown mushrooms","Stove top","Frying pan",[],[G("mushrooms",250,{station:"pan"})],
+  [{t:"Dry-sear until they squeak, then brown.",mins:9}]),
+ ST("rice","Toast and build","Stove top","Saucepan",["stock"],[G("onion",1,{integer:true}),G("rice",180,{station:"pan"})],
+  [{t:"Soften onion, toast rice until the edges go translucent.",mins:6},
+   {t:"Stock a ladle at a time, stirring, 18 minutes.",mins:18}]),
+ ST("mant","Mantecatura","Bench","Saucepan",["rice","mush"],[G("butter",40),G("parmesan",60)],
+  [{t:"Beat in cold butter and cheese off the heat.",mins:3,tip:"Cold butter, no heat. That temperature drop is what makes it creamy rather than greasy."}])]),
+RC("tortilla","Tortilla española","Spanish","Brunch","Savoury",55,["Fraggle Rock","King of the Hill"],"potato",[
+ ST("confit","Confit potato","Stove top","Frying pan",[],
+  [G("olive-oil",200,{station:"pan"}),G("potato",600,{station:"pan"}),G("onion",1,{integer:true})],
+  [{t:"Low heat, 25 minutes. Poaching in oil, not frying.",mins:25,tip:"If it sizzles hard the heat is too high and you'll get crisps instead of tortilla."}]),
+ ST("eggs","Beat the eggs","Bench","Mixing bowl",[],[G("eggs",6,{station:"wet",integer:true})],
+  [{t:"Beat well, season.",mins:3}]),
+ ST("set","Set and flip","Stove top","Frying pan",["confit","eggs"],[],
+  [{t:"Drain, fold in, rest 15 minutes.",mins:15},{t:"Set in the pan, flip once, keep the centre loose.",mins:9}])]),
+RC("bibimbap","Bibimbap","Korean","Lunch","Savoury",35,["Adventure Time","SpongeBob"],"rice",[
+ ST("rice","Rice","Stove top","Saucepan",[],[G("rice",160,{station:"pan"})],
+  [{t:"Cook slightly dry so it crisps in the bowl.",mins:18}]),
+ ST("veg","Sear components","Stove top","Frying pan",[],[G("scallion",2,{integer:true}),G("garlic",2,{integer:true})],
+  [{t:"Sear each vegetable separately, keep them apart.",mins:10,tip:"Separate is the point. Cooked together it's a stir-fry; bibimbap is defined by distinct components."}]),
+ ST("egg","Fry the egg","Stove top","Frying pan",["veg"],[G("eggs",2,{station:"pan",integer:true})],
+  [{t:"Crisp edges, runny yolk.",mins:4}]),
+ ST("bowl","Build","Bench","Board",["rice","egg"],[G("gochujang",40),G("sesame-oil",10),G("soy",15)],
+  [{t:"Sauce on the side, mix at the table.",mins:2}])]),
+RC("korokke","Korokke","Japanese","Snack","Savoury",60,["Studio Ghibli","SpongeBob"],"potato",[
+ ST("mash","Boil and rice","Stove top","Saucepan",[],[G("potato",500,{station:"pan"}),G("onion",1,{integer:true})],
+  [{t:"Boil and rice while hot, then cool completely.",mins:35,tip:"Ricing hot and cooling fully is the difference between a croquette that holds and one that bursts."}]),
+ ST("bread","Shape and bread","Bench","Mixing bowl",["mash"],
+  [G("ap-flour",60,{station:"dry"}),G("eggs",2,{station:"wet",integer:true}),G("panko",100,{station:"dry"})],
+  [{t:"Shape, then flour, egg, panko.",mins:12}]),
+ ST("oil","Heat the oil","Fry","Deep pan",[],[G("olive-oil",250,{station:"pan"})],[{t:"Bring to 180 °C.",mins:8}]),
+ ST("fry","Fry","Fry","Deep pan",["bread","oil"],[],[{t:"Until deep gold — they're already cooked inside.",mins:6}])]),
+RC("bravas","Patatas bravas","Spanish","Snack","Savoury",40,["Fraggle Rock","Regular Show"],"potato",[
+ ST("par","Parboil and dry","Stove top","Saucepan",[],[G("potato",600,{station:"pan"})],
+  [{t:"Parboil, then steam-dry in the colander five minutes.",mins:18,tip:"Surface moisture is what stops a crust forming."}]),
+ ST("sauce","Brava sauce","Stove top","Saucepan",[],
+  [G("tomatoes",300,{station:"pan"}),G("garlic",3,{integer:true}),G("vinegar",15,{optional:true})],
+  [{t:"Reduce, then sharpen with vinegar at the end.",mins:15}]),
+ ST("fry","Double fry","Fry","Deep pan",["par"],[G("olive-oil",150,{station:"pan"})],
+  [{t:"Low to cook through, hot to crisp.",mins:14}]),
+ ST("plate","Plate","Bench","Board",["fry","sauce"],[],[{t:"Sauce under, potatoes over.",mins:2}])]),
+RC("mushpasta","Mushroom butter pasta","Italian","Dinner","Umami",25,["Chowder","Regular Show"],"spaghetti",[
+ ST("mush","Brown mushrooms","Stove top","Frying pan",[],
+  [G("mushrooms",250,{station:"pan"}),G("garlic",2,{integer:true}),G("butter",50)],
+  [{t:"Dry-sear until they squeak, then brown.",mins:9,tip:"No fat at first. Mushrooms are 90% water — butter early and they boil instead of browning."},
+   {t:"Butter and garlic at the end, not the start.",mins:2}]),
+ ST("pasta","Boil pasta","Stove top","Stock pot",[],[G("spaghetti",200,{station:"pan"})],
+  [{t:"Salted water, one minute under.",mins:9}]),
+ ST("fin","Emulsify","Stove top","Frying pan",["mush","pasta"],[G("parmesan",40,{optional:true})],
+  [{t:"Pasta water and cheese, toss hard.",mins:3}])]),
+RC("oatmeal","Overnight oats","American","Breakfast","Sweet",10,["ALF","Fraggle Rock"],"oats",[
+ ST("jar","Build the jar","Bench","Heatproof jar",[],
+  [G("oats",80,{station:"direct"}),G("milk",180,{station:"wet",subs:["yogurt"]}),
+   G("salt",1,{station:"direct"}),G("honey",20,{station:"direct",optional:true})],
+  [{t:"Combine and refrigerate overnight.",mins:3,tip:"The pinch of salt isn't seasoning — it suppresses bitterness so the oats read sweeter at the same sugar."},
+   {t:"Whatever fruit is about to turn.",mins:2,optional:true}])])];
+
+const GENERAL_TIPS=[
+ "Weigh, never measure by volume. A cup of flour varies by 20% depending on how you scoop it.",
+ "Tare between every ingredient. It costs a second and removes a whole class of error.",
+ "A hot pan on the scale platform will drift the reading — load cells are temperature sensitive.",
+ "If a step says rest, the resting is the step.",
+ "Salt early for seasoning, late for texture.",
+ "Your oven is probably not the temperature it claims. Worth mapping once.",
+ "Overshoot on the basis ingredient is recoverable — the recipe rescales. Overshoot on salt is not.",
+ "Two point four eggs is two eggs. That quantisation is a real error and it's logged separately.",
+ "Parallel stages are where home cooks lose time. Start the longest thing first."];
+
+const LS="mise.v3";
+let S=load()||fresh();
+function fresh(){
+  const p={};
+  SEED.forEach(([id,name,nl,cat,tag,cls,q,unit,int,bought,shelf,low,sub,price,pack])=>{
+    p[id]={id,name,nl,cat,tag,cls,qty:q,unit,integer:!!int,
+      bought:q>0?iso(d(bought)):null,expires:q>0?iso(d(bought+shelf)):null,shelf,low,sub,price,pack}});
+  return {pantry:p,log:[],custom:[],appliances:APPLIANCES.map(a=>({...a})),kit:{...DEFAULT_KIT},
+    reels:{cuisine:"Any",meal:"Any",taste:"Any",theme:"Any"},themeOther:"",
+    pins:{cuisine:false,meal:false,taste:false,theme:false},
+    effort:"Any",medium:"Any",mode:"auto",intakeMode:"manual",basket:[],intake:[],demo:true};
+}
+function load(){return (window.MiseAPI&&MiseAPI.cachedState())||null}
+function save(){if(window.MiseAPI)MiseAPI.queueSave(S);else try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
+const RECIPES=()=>[...BUILTIN,...(S.custom||[])];
+const P=id=>S.pantry[id], nm=id=>P(id)?.name||id, nlOf=id=>P(id)?.nl||"";
+const un=id=>P(id)?.unit||"g", qty=id=>P(id)?.qty||0, isInt=id=>!!P(id)?.integer;
+const allIng=r=>r.stages.flatMap(s=>s.ing);
+const rMediums=r=>[...new Set(r.stages.map(s=>s.medium))];
+const mediumsAvail=()=>["Any",...new Set(S.appliances.filter(a=>a.have).map(a=>a.medium))];
+
+function rate(id){
+  const evs=S.log.flatMap(l=>Object.entries(l.actual||{}).filter(([k])=>k===id).map(([,v])=>({v,date:l.date})));
+  if(evs.length>=2){const span=Math.max(1,Math.abs(days(evs[0].date)));
+    return {r:evs.reduce((s,e)=>s+e.v,0)/span,n:evs.length,src:"measured"}}
+  return {r:BASE_RATE[id]||1,n:evs.length,src:"estimated"};
+}
+function supply(id){const{r,n,src}=rate(id);return{d:r>0?qty(id)/r:999,r,n,src}}
+const surplus=id=>supply(id).d>75&&qty(id)>0;
+function urgency(id){const it=P(id);if(!it||!it.expires||it.qty<=0)return 0;
+  const n=days(it.expires);return n<0?0:n<=1?1:n<=3?.7:n<=6?.35:0}
+function ratingOf(rid){
+  const rs=S.log.filter(l=>l.id===rid&&l.rating);
+  if(!rs.length)return null;
+  const avg=k=>rs.reduce((s,l)=>s+(l.rating[k]||0),0)/rs.length;
+  return {taste:avg("taste"),texture:avg("texture"),again:avg("again"),
+    overall:(avg("taste")+avg("texture")+avg("again"))/3,n:rs.length};
+}
+const cookCount=rid=>S.log.filter(l=>l.id===rid).length;
+const themeActive=()=>S.reels.theme==="Other…"?(S.themeOther||"").trim():(S.reels.theme==="Any"?"":S.reels.theme);
+function matchesQ(r,q){return (q.cuisine==="Any"||r.cuisine===q.cuisine)&&(q.meal==="Any"||r.meal===q.meal)&&
+  (q.taste==="Any"||r.taste===q.taste)&&(q.theme==="Any"||q.theme==="Other…"||r.themes.includes(q.theme))}
+const countQ=q=>RECIPES().filter(r=>matchesQ(r,q)).length;
+function feasVals(k,base){
+  const opts=({cuisine:CUISINES,meal:MEALS,taste:TASTES,theme:THEMES})[k];
+  return opts.filter(v=>v==="Other…"?false:countQ({...base,[k]:v})>0);
+}
+const PEN={cuisine:42,meal:30,taste:26,theme:22,medium:34,effort:26};
+function analyse(r){
+  let need=0,got=0,missing=[],rescue=[],surp=[],urg=0;
+  allIng(r).forEach(i=>{need++;const h=qty(i.id);
+    if(h>=i.amt){got++;const u=urgency(i.id);if(u>=.7)rescue.push(i.id);urg+=u;if(surplus(i.id))surp.push(i.id)}
+    else if(h>0){got+=h/i.amt;missing.push({id:i.id,short:i.amt-h})}
+    else missing.push({id:i.id,short:i.amt})});
+  const cov=need?got/need:0, miss=[];
+  if(S.reels.cuisine!=="Any"&&r.cuisine!==S.reels.cuisine)miss.push(["cuisine",`${r.cuisine}, not ${S.reels.cuisine}`]);
+  if(S.reels.meal!=="Any"&&r.meal!==S.reels.meal)miss.push(["meal",`${r.meal.toLowerCase()}, not ${S.reels.meal.toLowerCase()}`]);
+  if(S.reels.taste!=="Any"&&r.taste!==S.reels.taste)miss.push(["taste",`${r.taste.toLowerCase()}, not ${S.reels.taste.toLowerCase()}`]);
+  const th=themeActive();
+  if(th){const known=THEMES.includes(th);
+    const hit=known?r.themes.includes(th)
+      :(r.name+" "+r.cuisine+" "+r.themes.join(" ")+" "+r.taste).toLowerCase().includes(th.toLowerCase());
+    if(!hit)miss.push(["theme",`not tagged ${th}`])}
+  if(S.medium!=="Any"&&!rMediums(r).includes(S.medium))miss.push(["medium",`no ${S.medium.toLowerCase()} stage`]);
+  const okE=S.effort==="Any"||(S.effort==="Under 30 min"&&r.mins<=30)||
+    (S.effort==="An hour-ish"&&r.mins<=70)||S.effort==="All evening";
+  if(!okE)miss.push(["effort",`${r.mins} min`]);
+  const last=S.log.filter(l=>l.id===r.id).slice(-1)[0];
+  const rec=last?clamp(1-Math.abs(days(last.date))/21,0,1):0;
+  const rt=ratingOf(r.id);
+  const sc=cov*100+urg*45+surp.length*13-rec*28+(missing.length?0:22)
+    +(rt?(rt.overall-3)*9:0)-miss.reduce((s,[k])=>s+PEN[k],0);
+  return {r,cov,missing,rescue,surp,urg,miss,score:sc,rating:rt};
+}
+function suggestions(){
+  const all=RECIPES().map(analyse).sort((a,b)=>b.score-a.score);
+  return {exact:all.filter(a=>!a.miss.length).slice(0,6),near:all.filter(a=>a.miss.length).slice(0,4)};
+}
+function unlocks(){
+  const t={};
+  RECIPES().forEach(r=>{const m=allIng(r).filter(i=>qty(i.id)<i.amt);
+    if(m.length&&m.length<=2)m.forEach(i=>{
+      (t[i.id]=t[i.id]||{id:i.id,recipes:[],need:0}).recipes.push(r.name);
+      t[i.id].need=Math.max(t[i.id].need,i.amt-qty(i.id))})});
+  return Object.values(t).map(u=>({...u,roi:u.recipes.length/(P(u.id)?.price||2)})).sort((a,b)=>b.roi-a.roi);
+}
+const lowStock=()=>Object.values(S.pantry).filter(i=>i.qty<=i.low||(i.expires&&days(i.expires)<=3&&i.qty>0))
+  .sort((a,b)=>(a.expires?days(a.expires):999)-(b.expires?days(b.expires):999));
+
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let tT;const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("up");clearTimeout(tT);tT=setTimeout(()=>t.classList.remove("up"),2500)};
+const fmtT=ms=>{const s=Math.max(0,Math.floor(ms/1000));return`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`};
+const starStr=v=>v==null?"":"★".repeat(Math.round(v))+"☆".repeat(Math.max(0,5-Math.round(v)));
+function go(v){$$("nav button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));
+  $$(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));
+  ({decide:renderDecide,cook:renderCook,book:renderBook,pantry:renderPantry,shop:renderShop,hub:renderHub})[v]();
+  renderBell();window.scrollTo(0,0)}
+$$("nav button").forEach(b=>b.onclick=()=>go(b.dataset.v));
+function renderBell(){
+  const n=S.intake.length;
+  $("#bell").innerHTML=n?`<button>${n} to scan</button>
+    <div class="bellpop"><span class="eyebrow">Queued for intake</span>
+      <ul style="margin:8px 0 10px;padding-left:17px;font-size:.83rem;line-height:1.6">
+        ${S.intake.map(id=>`<li>${esc(nm(id))} <span class="nl">${esc(nlOf(id))}</span></li>`).join("")}</ul>
+      <button class="btn sm amber" id="bellGo">Scan them now</button></div>`
+   :`<span class="note mono">${iso(today)}</span>`;
+  const g=$("#bellGo");if(g)g.onclick=()=>{go("pantry");setTimeout(intakeRun,80)};
+}
+
+/* ══ DECIDE ══ */
+const REELDEF=[["cuisine","Cuisine",()=>CUISINES],["meal","Meal",()=>MEALS],
+  ["taste","Taste",()=>TASTES],["theme","Theme",()=>THEMES]];
+function pinnedBase(except){
+  const b={cuisine:"Any",meal:"Any",taste:"Any",theme:"Any"};
+  REELDEF.forEach(([k])=>{if(S.pins[k]&&k!==except)b[k]=S.reels[k]});return b;
+}
+function renderDecide(){
+  $("#v-decide").innerHTML=`
+  <div class="col-sm"><span class="eyebrow">Step one</span><h1>What are we making?</h1>
+    <p class="sub">Reels only land on combinations that exist. Anything you set by hand that has no exact match still returns the closest ones.</p></div>
+  <div class="card pad col">
+    <div class="reels">${REELDEF.map(([k,label,opts])=>{
+      const base=pinnedBase(k),list=["Any",...opts()];
+      return `<div class="reel">
+        <div class="reel-cap"><b>${label}</b>
+          <button class="pin" data-pin="${k}" aria-pressed="${S.pins[k]}">${S.pins[k]?"pinned":"pin"}</button></div>
+        <div class="win"><div class="strip" id="st-${k}">${Array(5).fill(list).flat().map(o=>`<div>${esc(o)}</div>`).join("")}</div></div>
+        <select data-sel="${k}">${list.map(o=>{
+          const c=o==="Other…"?null:o==="Any"?countQ(base):countQ({...base,[k]:o});
+          return `<option value="${esc(o)}" ${S.reels[k]===o?"selected":""}>${esc(o)}${c===null?"":` (${c})`}</option>`}).join("")}</select>
+        <div class="reel-ctl"><button data-spin="${k}">spin</button><button data-any="${k}">any</button></div></div>`}).join("")}</div>
+    ${S.reels.theme==="Other…"?`<input id="themeOther" placeholder="Type a theme — Bob's Burgers, Redwall, Dune…" value="${esc(S.themeOther)}">`:""}
+    <div class="row"><button class="btn amber" id="spinAll">Spin everything unpinned</button>
+      <button class="btn ghost sm" id="allAny">Reset to Any</button>
+      <span class="note">Numbers in each dropdown are how many recipes that choice leaves you.</span></div></div>
+  <div class="card pad col-sm"><span class="eyebrow">Effort</span><div class="chips" id="cEffort"></div></div>
+  <div class="card pad col-sm"><span class="eyebrow">Cooking medium</span><div class="chips" id="cMedium"></div>
+    <p class="note">Driven by the kit you own. Turn on the sous vide rig or the stand mixer on the Pantry tab and its medium appears here.</p></div>
+  <button class="btn wide" id="find">Show me what I can cook</button>
+  <div class="col" id="results"></div>`;
+  REELDEF.forEach(([k,,o])=>settle(k,["Any",...o()].indexOf(S.reels[k])));
+  $$("[data-pin]").forEach(b=>b.onclick=()=>{S.pins[b.dataset.pin]=!S.pins[b.dataset.pin];save();renderDecide()});
+  $$("[data-spin]").forEach(b=>b.onclick=()=>spinOne(b.dataset.spin));
+  $$("[data-any]").forEach(b=>b.onclick=()=>{S.reels[b.dataset.any]="Any";save();renderDecide()});
+  $$("[data-sel]").forEach(s=>s.onchange=()=>{S.reels[s.dataset.sel]=s.value;save();renderDecide()});
+  const to=$("#themeOther");if(to)to.oninput=()=>{S.themeOther=to.value;save();results()};
+  $("#spinAll").onclick=spinAll;
+  $("#allAny").onclick=()=>{REELDEF.forEach(([k])=>S.reels[k]="Any");S.themeOther="";save();renderDecide()};
+  chips("#cEffort",["Any","Under 30 min","An hour-ish","All evening"],o=>S.effort===o,o=>S.effort=o);
+  chips("#cMedium",mediumsAvail(),o=>S.medium===o,o=>S.medium=o);
+  $("#find").onclick=()=>{results();$("#results").scrollIntoView({behavior:"smooth"})};
+  results();
+}
+function chips(host,opts,get,set){
+  const el=$(host);if(!el)return;
+  el.innerHTML=opts.map(o=>`<button class="chip" aria-pressed="${get(o)}">${esc(o)}</button>`).join("");
+  $$(host+" .chip").forEach((b,i)=>b.onclick=()=>{set(opts[i]);save();chips(host,opts,get,set);results()});
+}
+function settle(k,i){const el=$("#st-"+k);if(!el)return;
+  const n=["Any",...REELDEF.find(r=>r[0]===k)[2]()].length;
+  el.style.transition="none";el.style.transform=`translateY(${-(n*2+Math.max(i,0))*46}px)`}
+function animate(k,val,cb){
+  const list=["Any",...REELDEF.find(r=>r[0]===k)[2]()],idx=list.indexOf(val),el=$("#st-"+k);
+  if(!el||idx<0){cb&&cb();return}
+  el.style.transition="none";el.style.transform="translateY(0px)";void el.offsetHeight;
+  el.style.transition="transform 1.05s cubic-bezier(.15,.85,.25,1)";
+  el.style.transform=`translateY(${-(list.length*3+idx)*46}px)`;
+  setTimeout(()=>cb&&cb(),1120);
+}
+function spinOne(k){
+  let vals=feasVals(k,{...S.reels,[k]:"Any"});
+  if(!vals.length)vals=feasVals(k,pinnedBase(k));
+  if(!vals.length)vals=({cuisine:CUISINES,meal:MEALS,taste:TASTES,theme:THEMES})[k].filter(v=>v!=="Other…");
+  const v=vals[Math.floor(Math.random()*vals.length)];
+  S.reels[k]=v;save();animate(k,v,()=>renderDecide());
+}
+function spinAll(){
+  const open=REELDEF.filter(([k])=>!S.pins[k]).map(([k])=>k);
+  if(!open.length)return toast("Everything is pinned");
+  const pool=RECIPES().filter(r=>matchesQ(r,pinnedBase()));
+  const src=pool.length?pool:RECIPES();
+  const pick=src[Math.floor(Math.random()*src.length)];
+  open.forEach(k=>{
+    if(k==="theme")S.reels.theme=pick.themes.length?pick.themes[Math.floor(Math.random()*pick.themes.length)]:"Any";
+    else S.reels[k]=pick[k]});
+  save();
+  open.forEach((k,i)=>setTimeout(()=>animate(k,S.reels[k],i===open.length-1?()=>renderDecide():null),i*120));
+}
+function results(){
+  const host=$("#results");if(!host)return;
+  const{exact,near}=suggestions(),th=themeActive();
+  host.innerHTML=`<div class="between"><span class="eyebrow">${exact.length} exact${near.length?` · ${near.length} close`:""}</span>
+    <span class="note mono">${esc(S.reels.cuisine)} · ${esc(S.reels.meal)} · ${esc(S.reels.taste)} · ${esc(th||"any theme")} · ${esc(S.medium)}</span></div>`
+   +(exact.length?exact.map(a=>sugCard(a,false)).join(""):`<div class="card empty">Nothing matches all of that exactly — the closest are below, with what's off marked on each.</div>`)
+   +(near.length?`<div class="between" style="margin-top:6px"><span class="eyebrow">Closest matches</span></div>`+near.map(a=>sugCard(a,true)).join(""):"");
+  $$("[data-cook]").forEach(b=>b.onclick=e=>{if(e.target.closest("[data-peek]"))return;openBrief(b.dataset.cook)});
+  $$("[data-peek]").forEach(b=>b.onclick=e=>{e.stopPropagation();b.closest(".sug").classList.toggle("open")});
+}
+function sugCard(a,isNear){
+  const pct=Math.round(a.cov*100),ready=!a.missing.length,tg=[];
+  if(isNear)a.miss.forEach(([,l])=>tg.push(`<span class="tag miss">${esc(l)}</span>`));
+  tg.push(ready?`<span class="tag g">all in stock</span>`:`<span class="tag ${a.missing.length<=1?"a":"r"}">missing ${a.missing.length}</span>`);
+  if(a.rescue.length)tg.push(`<span class="tag a">rescues ${a.rescue.length} expiring</span>`);
+  if(a.surp.length)tg.push(`<span class="tag b">uses surplus ${esc(nm(a.surp[0]).toLowerCase())}</span>`);
+  tg.push(`<span class="tag">${esc(a.r.cuisine)}</span>`,`<span class="tag">${a.r.mins} min</span>`);
+  const n=cookCount(a.r.id);if(n)tg.push(`<span class="tag">cooked ${n}×</span>`);
+  const why=[];
+  if(a.rescue.length)why.push(`rescues ${a.rescue.map(x=>nm(x).toLowerCase()).join(" and ")} before it turns`);
+  if(a.surp.length)why.push(`${Math.round(supply(a.surp[0]).d)} days of ${nm(a.surp[0]).toLowerCase()} sitting there`);
+  if(a.missing.length)why.push(`you'd need ${a.missing.map(m=>`${Math.round(m.short)}${un(m.id)} ${nm(m.id).toLowerCase()}`).join(", ")}`);
+  const ings=allIng(a.r).map(i=>{const short=qty(i.id)<i.amt;
+    return `<li class="${short?"miss":""}">${Math.round(i.amt)}${un(i.id)} ${esc(nm(i.id).toLowerCase())}${i.optional?" <i>(optional)</i>":""}${short?" — short":""}</li>`}).join("");
+  const stg=a.r.stages.map(s=>`<li><b>${esc(s.name)}</b> — ${esc(s.medium)}, ${esc(s.vessel)}${s.needs.length?` <i>after ${s.needs.map(x=>esc(a.r.stages.find(y=>y.id===x)?.name||x)).join(" + ")}</i>`:""}</li>`).join("");
+  return `<div class="sug ${ready&&!isNear?"ready":a.rescue.length?"hot":""}" data-cook="${a.r.id}" tabindex="0" role="button">
+    <div class="edge"></div><div class="sug-in">
+      <div class="between"><h3>${esc(a.r.name)}</h3>
+        <span class="row" style="gap:8px">${a.rating?`<span class="stars">${starStr(a.rating.overall)} <span class="note">${a.rating.overall.toFixed(1)}</span></span>`:""}
+          <span class="note mono">${pct}%</span><button class="btn ghost sm" data-peek>peek</button></span></div>
+      <div class="meter"><i class="${ready?"":"part"}" style="width:${pct}%"></i></div>
+      <div class="tags">${tg.join("")}</div>
+      ${why.length?`<p class="why">${esc(why.join(" · "))}</p>`:""}
+      <div class="peek"><div class="peekgrid">
+        <div><span class="eyebrow">You'll weigh</span><ul>${ings}</ul></div>
+        <div><span class="eyebrow">Stages</span><ul>${stg}</ul></div></div></div></div></div>`;
+}
+
+/* ══ COOK ══ */
+let C=null,raf=null,vel=0,stableSince=null,tipT=null,clockT=null;
+function openBrief(id){
+  const r=RECIPES().find(x=>x.id===id);if(!r)return;
+  C={r,phase:"brief",subs:{},factor:1,focus:null,scale:0,manual:"",actual:{},
+    stages:Object.fromEntries(r.stages.map(s=>[s.id,{state:"idle",i:0,t0:null,ms:0}])),
+    t0:null,paused:false,pauseAt:null,breakMs:0,extraBreak:0,theme:themeActive(),
+    settled:false,pouring:false,rating:null,logged:false};
+  go("cook");
+}
+function targetOf(i){const id=C.subs[i.id]||i.id,raw=i.amt*C.factor;
+  return isInt(id)?Math.max(1,Math.round(raw)):Math.round(raw*10)/10}
+const tol=t=>Math.max(.5,t*.02);
+const stObj=sid=>C.r.stages.find(s=>s.id===sid);
+const stState=sid=>{const st=C.stages[sid],s=stObj(sid);
+  if(st.state==="done")return "done";
+  if(st.state==="running")return "running";
+  return s.needs.every(n=>C.stages[n]?.state==="done")?"ready":"locked"};
+function vesselClash(){
+  const need={};
+  C.r.stages.filter(s=>C.stages[s.id].state==="running").forEach(s=>need[s.vessel]=(need[s.vessel]||0)+1);
+  return Object.entries(need).filter(([v,n])=>n>(S.kit[v]??0)).map(([v,n])=>`${v}: need ${n}, own ${S.kit[v]??0}`);
+}
+function renderCook(){
+  const h=$("#v-cook");
+  if(!C){h.innerHTML=`<div class="card empty">Pick something on the Decide tab first.</div>`;return}
+  if(C.phase==="brief")return renderBrief();
+  if(C.phase==="rate")return renderRate();
+  if(C.phase==="done")return renderSummary();
+  renderBoard();
+}
+function renderBrief(){
+  const rows=[...allIng(C.r)].sort((a,b)=>(a.id===C.r.basis?-1:b.id===C.r.basis?1:0)).map(i=>{
+    const id=C.subs[i.id]||i.id,t=targetOf(i),short=qty(id)<t;
+    const same=Object.values(S.pantry).filter(p=>p.sub===P(i.id)?.sub&&p.id!==i.id).map(p=>p.id);
+    const cls=Object.values(S.pantry).filter(p=>p.cls===P(i.id)?.cls).map(p=>p.id);
+    const opts=[...new Set([i.id,...(i.subs||[]),...same,...cls])];
+    return `<tr class="${short?"bad":""}"><td>${i.id===C.r.basis?`<span class="tag a">basis</span> `:""}${esc(nm(id))}
+      ${i.optional?`<span class="tag">optional</span>`:""}${isInt(id)?`<span class="tag">integer</span>`:""}</td>
+      <td><span class="station">${esc(i.station||"prep")}</span></td>
+      <td class="n">${t}${un(id)}</td><td class="n" style="color:${short?"var(--red)":"var(--fg-3)"}">${qty(id)}${un(id)}</td>
+      <td><select data-sub="${i.id}">${opts.map(o=>`<option value="${o}" ${id===o?"selected":""}>${esc(nm(o))}${o===i.id?"":" (sub)"}</option>`).join("")}</select></td></tr>`}).join("");
+  const vs={};C.r.stages.forEach(s=>vs[s.vessel]=(vs[s.vessel]||0)+1);
+  $("#v-cook").innerHTML=`
+   <div class="between"><div class="col-sm"><span class="eyebrow">${esc(C.r.cuisine)} · ${esc(C.r.taste)} · ~${C.r.mins} min${C.theme?" · "+esc(C.theme):""}</span>
+     <h1>${esc(C.r.name)}</h1></div><button class="btn ghost sm" id="quit">Back</button></div>
+   <div class="card pad col-sm"><span class="eyebrow">Stages — some of these run at the same time</span>
+     <div class="board">${C.r.stages.map(s=>`<div class="st">
+       <div class="hd"><h3>${esc(s.name)}</h3><span class="mt">~${s.steps.reduce((a,x)=>a+(x.mins||0),0)}m</span></div>
+       <div class="row" style="gap:6px"><span class="vessel">${esc(s.vessel)}</span><span class="station">${esc(s.medium)}</span></div>
+       <p class="note">${s.needs.length?"after "+s.needs.map(n=>esc(stObj(n)?.name||n)).join(" + "):"can start immediately"}</p></div>`).join("")}</div></div>
+   <div class="card pad col-sm"><span class="eyebrow">Vessels this needs</span>
+     <div class="chips">${Object.entries(vs).map(([v,n])=>{const own=S.kit[v]??0;
+       return `<span class="chip" style="${own<n?"border-color:var(--red);color:var(--red)":""}">${esc(v)} ×${n} · own ${own}</span>`}).join("")}</div>
+     <p class="note">Own fewer than a stage needs and you can still cook it — you'll just run those stages one after another instead of together.</p></div>
+   <div class="card pad col-sm"><span class="eyebrow">Entry mode</span><div class="chips" id="cMode"></div>
+     <p class="note">Manual means you type what the bench scale reads. Auto simulates the load-cell rig. Both log identically so their variance is comparable.</p></div>
+   <div class="col-sm"><span class="eyebrow">Everything you'll weigh — basis first</span>
+     <div class="tw"><table><thead><tr><th>Ingredient</th><th>Station</th><th style="text-align:right">Target</th>
+       <th style="text-align:right">Have</th><th>Using</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+   <button class="btn wide amber" id="begin">Begin — start the clock</button>`;
+  chips("#cMode",["auto","manual"],o=>S.mode===o,o=>S.mode=o);
+  $("#quit").onclick=()=>{C=null;go("decide")};
+  $$("[data-sub]").forEach(s=>s.onchange=()=>{
+    if(s.value===s.dataset.sub)delete C.subs[s.dataset.sub];else C.subs[s.dataset.sub]=s.value;
+    renderBrief()});
+  $("#begin").onclick=()=>{C.phase="board";C.t0=Date.now();renderCook();startClock()};
+}
+function startClock(){clearInterval(clockT);clockT=setInterval(()=>{
+  if(!C||!C.t0)return;
+  const e=$("#clk");if(e)e.textContent=fmtT(elapsed());
+  $$("[data-stclock]").forEach(el=>{const st=C.stages[el.dataset.stclock];
+    if(st&&st.state==="running")el.textContent=fmtT(st.ms+(Date.now()-st.t0))})},500)}
+const elapsed=()=>C.paused?(C.pauseAt-C.t0-C.breakMs):(Date.now()-C.t0-C.breakMs);
+function renderBoard(){
+  if(C.r.stages.every(s=>C.stages[s.id].state==="done")){C.phase="rate";return renderCook()}
+  const clash=vesselClash();
+  const head=`<div class="between">
+     <div class="col-sm"><span class="eyebrow">${esc(C.r.name)}${C.theme?" · "+esc(C.theme):""}</span>
+       <span class="clock" id="clk">${fmtT(elapsed())}</span></div>
+     <span class="row"><button class="btn ghost sm" id="pause">${C.paused?"Resume":"Pause"}</button>
+       <button class="btn ghost sm" id="addBreak">Log a break</button>
+       <button class="btn ghost sm" id="quit">Stop</button></span></div>
+   ${C.factor!==1?`<div class="banner">Rescaled to ${(C.factor*100).toFixed(1)}% of the written recipe.</div>`:""}
+   ${C.paused?`<div class="banner">Paused — this time is logged as a break, not as cooking.</div>`:""}
+   ${clash.length?`<div class="banner">Vessel conflict — ${esc(clash.join("; "))}. Finish one before starting the other, or the timings you log won't be real.</div>`:""}`;
+  const board=`<div class="board">${C.r.stages.map(s=>{
+    const st=C.stages[s.id],state=stState(s.id),running=state==="running";
+    const total=s.steps.reduce((a,x)=>a+(x.mins||0),0);
+    return `<div class="st ${state} ${C.focus===s.id?"focus":""}">
+      <div class="hd"><h3>${esc(s.name)}</h3>
+        <span class="mt" ${running?`data-stclock="${s.id}"`:""}>${running?fmtT(st.ms+(Date.now()-st.t0)):state==="done"?fmtT(st.ms):"~"+total+"m"}</span></div>
+      <div class="row" style="gap:6px"><span class="vessel">${esc(s.vessel)}</span><span class="station">${esc(s.medium)}</span></div>
+      <p class="note">${state==="locked"?"waiting on "+s.needs.filter(n=>C.stages[n].state!=="done").map(n=>esc(stObj(n).name)).join(" + ")
+        :state==="done"?"done":`${Math.min(st.i,s.ing.length+s.steps.length)} of ${s.ing.length+s.steps.length} done`}</p>
+      ${state==="ready"?`<button class="btn sm amber" data-start="${s.id}">Start</button>`:""}
+      ${running?`<button class="btn sm ${C.focus===s.id?"":"ghost"}" data-focus="${s.id}">${C.focus===s.id?"Focused":"Work on this"}</button>`:""}</div>`}).join("")}</div>`;
+  const panel=(C.focus&&C.stages[C.focus].state==="running")?stagePanel(C.focus)
+    :`<div class="card empty">Start a stage, then choose <b>Work on this</b> to weigh and step through it. More than one stage can run at once — that's the point.</div>`;
+  $("#v-cook").innerHTML=head+board+panel;
+  $("#quit").onclick=()=>{clearInterval(clockT);clearInterval(tipT);C=null;go("decide")};
+  $("#pause").onclick=()=>{if(C.paused){C.breakMs+=Date.now()-C.pauseAt;C.paused=false;C.pauseAt=null}
+    else{C.paused=true;C.pauseAt=Date.now()}renderCook()};
+  $("#addBreak").onclick=()=>{const v=prompt("How many minutes was that break?","5");
+    if(v!==null){C.extraBreak+=(parseFloat(v)||0)*60000;toast(`Logged ${v} min`);renderCook()}};
+  $$("[data-start]").forEach(b=>b.onclick=()=>{const id=b.dataset.start;
+    C.stages[id].state="running";C.stages[id].t0=Date.now();C.focus=id;C.scale=0;C.manual="";renderCook()});
+  $$("[data-focus]").forEach(b=>b.onclick=()=>{C.focus=b.dataset.focus;C.scale=0;C.manual="";renderCook()});
+  wirePanel();
+}
+const panelItems=sid=>{const s=stObj(sid);
+  return [...s.ing.map(i=>({kind:"weigh",i})),...s.steps.map(x=>({kind:"do",s:x}))]};
+function stagePanel(sid){
+  const s=stObj(sid),st=C.stages[sid],items=panelItems(sid),cur=items[st.i];
+  if(!cur)return `<div class="stage col"><h3>${esc(s.name)} — everything done</h3>
+    <p class="note">Marking it complete unlocks anything waiting on it.</p>
+    <button class="btn amber" data-fin="${sid}" style="align-self:flex-start">Mark stage complete</button></div>`;
+  if(cur.kind==="weigh"){
+    const i=cur.i,id=C.subs[i.id]||i.id,t=targetOf(i),diff=C.scale-t;
+    const within=Math.abs(diff)<=tol(t),over=diff>tol(t);
+    const leds=Array.from({length:14},(_,k)=>{const on=C.scale/Math.max(t,.001)>=(k+1)/14;
+      return `<i style="background:${on?(over?"var(--red)":within?"var(--green)":"var(--amber)"):"var(--panel-2)"}"></i>`}).join("");
+    const quant=isInt(id)?` · quantised from ${(i.amt*C.factor).toFixed(2)}`:"";
+    return `<div class="stage">
+      <div class="row" style="gap:8px;margin-bottom:5px"><span class="eyebrow">${esc(s.name)} · add ${esc(nm(id))}</span>
+        <span class="station">${esc(i.station||"prep")}</span>${i.id===C.r.basis?`<span class="tag a">basis</span>`:""}
+        ${i.optional?`<span class="tag">optional</span>`:""}</div>
+      <div class="readout" style="color:${over?"var(--red)":within?"var(--green)":"var(--fg)"}">
+        ${C.scale.toFixed(isInt(id)?0:1)}<small>${un(id)}</small></div>
+      <div class="target">target ${t}${un(id)} · ±${tol(t).toFixed(1)} · pantry ${qty(id)}${un(id)}${quant}</div>
+      <div class="leds">${leds}</div>
+      ${S.mode==="auto"?`<button class="pourbtn" id="pour">HOLD TO POUR</button>`
+        :`<div class="row"><input id="manual" type="number" step="0.1" inputmode="decimal" placeholder="what the scale reads" value="${esc(C.manual)}" style="flex:1;min-width:150px">
+          <button class="btn amber" id="confirm">Confirm</button></div>`}
+      <div class="row" style="margin-top:11px"><button class="btn ghost sm" id="tare">Tare</button>
+        ${i.optional?`<button class="btn ghost sm" id="skip">Skip</button>`:""}
+        ${S.mode==="auto"&&within?`<button class="btn amber sm" id="confirm">Confirm ${C.scale.toFixed(1)}${un(id)}</button>`:""}
+        ${over&&i.id===C.r.basis?`<button class="btn amber sm" id="rescale">Rescale to ${C.scale.toFixed(0)}${un(id)}</button>`:""}</div>
+      <div class="tipbox"><b>tip</b><span id="tiptext"></span></div>${stepList(sid)}</div>`;
+  }
+  const x=cur.s;
+  return `<div class="stage col">
+    <div class="row" style="gap:8px"><span class="eyebrow">${esc(s.name)}</span>
+      <span class="station">${esc(s.medium)}</span><span class="vessel">${esc(s.vessel)}</span>
+      ${x.optional?`<span class="tag">optional</span>`:""}${x.mins?`<span class="tag">~${x.mins}m</span>`:""}</div>
+    <p style="font-size:1.1rem;line-height:1.45">${esc(x.t)}</p>
+    <div class="row"><button class="btn" id="lap">Lap — done</button>
+      ${x.optional?`<button class="btn ghost" id="skip">Skip</button>`:""}</div>
+    <div class="tipbox"><b>tip</b><span id="tiptext"></span></div>${stepList(sid)}</div>`;
+}
+function stepList(sid){
+  const st=C.stages[sid];
+  return `<div class="steplist" style="margin-top:13px">${panelItems(sid).map((x,k)=>{
+    const cl=k===st.i?"now":k<st.i?"done":"";
+    const id=x.kind==="weigh"?(C.subs[x.i.id]||x.i.id):null;
+    const lab=x.kind==="weigh"?`Add ${nm(id)}`:x.s.t;
+    const r=x.kind==="weigh"
+      ?(k<st.i&&C.actual[id]!=null?`<span class="g">${C.actual[id]}${un(id)}</span>`:`<span class="g">${targetOf(x.i)}${un(id)}</span>`)
+      :(x.s.mins?`<span class="g">~${x.s.mins}m</span>`:"");
+    return `<div class="stp ${cl}"><span class="n">${k<st.i?"✓":k+1}</span><span>${esc(lab)}</span>${r}</div>`}).join("")}</div>`;
+}
+function wirePanel(){
+  const sid=C.focus;if(!sid||C.stages[sid].state!=="running")return;
+  const fin=$("[data-fin]");if(fin)fin.onclick=()=>{
+    const st=C.stages[sid];st.ms+=Date.now()-st.t0;st.state="done";C.focus=null;save();renderCook()};
+  const adv=()=>{C.stages[sid].i++;C.scale=0;C.manual="";vel=0;stableSince=null;C.settled=false;save();renderCook()};
+  const lp=$("#lap");if(lp)lp.onclick=adv;
+  const sk=$("#skip");if(sk)sk.onclick=()=>{const cur=panelItems(sid)[C.stages[sid].i];
+    if(cur&&cur.kind==="weigh")C.actual[C.subs[cur.i.id]||cur.i.id]=0;adv()};
+  const tr=$("#tare");if(tr)tr.onclick=()=>{C.scale=0;C.settled=false;stableSince=null;renderCook()};
+  const cf=$("#confirm");if(cf)cf.onclick=()=>{
+    if(S.mode==="manual"){const v=parseFloat($("#manual").value);if(isNaN(v))return toast("Type what the scale reads");C.scale=v}
+    commit(sid)};
+  const mi=$("#manual");if(mi){mi.oninput=()=>C.manual=mi.value;
+    mi.onkeydown=e=>{if(e.key==="Enter")$("#confirm").click()}}
+  const rs=$("#rescale");if(rs)rs.onclick=()=>{
+    const b=allIng(C.r).find(x=>x.id===C.r.basis);
+    C.factor=C.scale/b.amt;toast(`Rescaled to ${(C.factor*100).toFixed(1)}%`);commit(sid)};
+  const pb=$("#pour");
+  if(pb){const on=e=>{e.preventDefault();C.pouring=true;pb.classList.add("on");tick(sid)};
+    const off=()=>{C.pouring=false;pb.classList.remove("on")};
+    pb.addEventListener("pointerdown",on);
+    ["pointerup","pointerleave","pointercancel"].forEach(ev=>pb.addEventListener(ev,off))}
+  rotateTip(panelItems(sid)[C.stages[sid].i]);
+}
+function rotateTip(cur){clearInterval(tipT);
+  const pool=[...(cur&&cur.kind==="do"&&cur.s.tip?[cur.s.tip]:[]),...GENERAL_TIPS];
+  let k=0;const put=()=>{const e=$("#tiptext");if(e)e.textContent=pool[k%pool.length]};
+  put();tipT=setInterval(()=>{k++;put()},7000)}
+function tick(sid){
+  if(raf)return;
+  const loop=()=>{
+    if(!C||C.focus!==sid){raf=null;return}
+    const cur=panelItems(sid)[C.stages[sid].i];
+    if(!cur||cur.kind!=="weigh"||S.mode!=="auto"){raf=null;return}
+    const t=targetOf(cur.i);
+    if(C.pouring){vel+=(t*.012-vel)*.25;stableSince=null}else vel*=.72;
+    if(Math.abs(vel)<.02)vel=0;
+    C.scale=Math.max(0,C.scale+vel+(vel>0?(Math.random()-.5)*.25:0));
+    const within=Math.abs(C.scale-t)<=tol(t);
+    if(within&&vel===0&&!C.pouring){
+      if(!stableSince)stableSince=performance.now();
+      C.settled=performance.now()-stableSince>1500;
+      if(C.settled){raf=null;commit(sid);return}
+    }else{stableSince=null;C.settled=false}
+    renderCook();
+    raf=(vel!==0||C.pouring||stableSince)?requestAnimationFrame(loop):null};
+  raf=requestAnimationFrame(loop);
+}
+function commit(sid){
+  const cur=panelItems(sid)[C.stages[sid].i];
+  if(cur&&cur.kind==="weigh"){
+    const id=C.subs[cur.i.id]||cur.i.id;
+    const v=isInt(id)?Math.round(C.scale):Math.round(C.scale*10)/10;
+    C.actual[id]=v;if(P(id))P(id).qty=Math.round((P(id).qty-v)*10)/10}
+  C.stages[sid].i++;C.scale=0;C.manual="";vel=0;stableSince=null;C.settled=false;C.pouring=false;raf=null;
+  save();renderCook();
+}
+function renderRate(){
+  clearInterval(clockT);clearInterval(tipT);
+  C.rating=C.rating||{taste:4,texture:4,again:4,notes:""};
+  const sl=(k,label)=>`<div class="rate"><span style="min-width:84px">${label}</span>
+     <input type="range" min="0" max="5" step="0.1" value="${C.rating[k]}" data-r="${k}">
+     <span class="mono" style="min-width:74px;text-align:right"><span class="stars">${starStr(C.rating[k])}</span> ${C.rating[k].toFixed(1)}</span></div>`;
+  $("#v-cook").innerHTML=`
+   <div class="col-sm"><span class="eyebrow">Before it's logged</span><h1>How was it?</h1>
+     <p class="sub">Decimals allowed. These average per recipe and feed straight back into what Decide suggests.</p></div>
+   <div class="card pad col-sm">${sl("taste","Taste")}${sl("texture","Texture")}${sl("again","Make again")}
+     <textarea id="notes" placeholder="What you'd change next time — this shows up in the recipe book.">${esc(C.rating.notes)}</textarea></div>
+   <div class="card pad col-sm"><span class="eyebrow">Breaks</span>
+     <p class="note">Paused: ${fmtT(C.breakMs)} · manually logged: ${fmtT(C.extraBreak)}</p>
+     <button class="btn ghost sm" id="addBreak2" style="align-self:flex-start">Add a break you forgot</button></div>
+   <button class="btn wide amber" id="finish">Log this cook</button>`;
+  $$("[data-r]").forEach(r=>r.oninput=()=>{C.rating[r.dataset.r]=parseFloat(r.value);renderRate()});
+  $("#notes").oninput=e=>C.rating.notes=e.target.value;
+  $("#addBreak2").onclick=()=>{const v=prompt("How many minutes?","10");
+    if(v!==null){C.extraBreak+=(parseFloat(v)||0)*60000;renderRate()}};
+  $("#finish").onclick=()=>{C.phase="done";renderCook()};
+}
+function renderSummary(){
+  const rows=allIng(C.r).map(i=>{
+    const id=C.subs[i.id]||i.id,orig=i.amt,adj=targetOf(i),act=C.actual[id]??0;
+    const err=adj?((act-adj)/adj*100):0,scaleDiff=orig?((adj-orig)/orig*100):0;
+    const qErr=isInt(id)&&i.amt*C.factor?((adj-i.amt*C.factor)/(i.amt*C.factor)*100):0;
+    return {id,cls:P(id)?.cls||"other",orig,adj,act,err,scaleDiff,qErr,sub:!!C.subs[i.id]}});
+  const scored=rows.filter(r=>r.act>0);
+  const mae=scored.length?scored.reduce((s,r)=>s+Math.abs(r.err),0)/scored.length:0;
+  const byCls={};scored.forEach(r=>(byCls[r.cls]=byCls[r.cls]||[]).push(Math.abs(r.err)));
+  const total=elapsed(),brk=C.breakMs+C.extraBreak;
+  if(!C.logged){
+    S.log.push({id:C.r.id,name:C.r.name,date:iso(today),ts:Date.now(),mode:S.mode,theme:C.theme||null,
+      factor:C.factor,mae:Math.round(mae*100)/100,totalMs:total,breakMs:brk,
+      stageMs:Object.fromEntries(Object.entries(C.stages).map(([k,v])=>[k,v.ms])),
+      rating:{...C.rating},actual:Object.fromEntries(rows.map(r=>[r.id,r.act])),
+      errors:Object.fromEntries(scored.map(r=>[r.id,Math.round(r.err*100)/100])),
+      classErr:Object.fromEntries(Object.entries(byCls).map(([k,v])=>[k,v.reduce((a,b)=>a+b,0)/v.length])),
+      subs:{...C.subs}});
+    C.logged=true;save();
+    if(window.MiseAPI)MiseAPI.logCook(S.log[S.log.length-1]);}
+  const ov=(C.rating.taste+C.rating.texture+C.rating.again)/3;
+  $("#v-cook").innerHTML=`
+   <div class="col-sm"><span class="eyebrow">Logged${C.theme?" · themed "+esc(C.theme):""}</span>
+     <h1>${esc(C.r.name)} — done</h1><p class="sub">Pantry decremented, stage times recorded, every deviation on the record.</p></div>
+   <div class="tiles">
+     <div class="tile"><span class="v" style="color:${mae<3?"var(--green)":mae<6?"var(--amber)":"var(--red)"}">${mae.toFixed(2)}%</span><span class="k">Mean abs error</span></div>
+     <div class="tile"><span class="v">${fmtT(total)}</span><span class="k">Active time</span></div>
+     <div class="tile"><span class="v">${fmtT(brk)}</span><span class="k">Breaks</span></div>
+     <div class="tile"><span class="v">${ov.toFixed(1)}</span><span class="k">Your rating</span></div></div>
+   <div class="card pad col-sm"><span class="eyebrow">Time per stage</span>
+     <div class="chips">${C.r.stages.map(s=>`<span class="chip">${esc(s.name)}: ${fmtT(C.stages[s.id].ms)}</span>`).join("")}</div>
+     <p class="note">Stage times tell you whether running things in parallel actually saved you anything.</p></div>
+   <div class="col-sm"><span class="eyebrow">Written · adjusted · actual</span>
+     <div class="tw"><table><thead><tr><th>Ingredient</th><th style="text-align:right">Written</th><th style="text-align:right">Adjusted</th>
+       <th style="text-align:right">Δ recipe</th><th style="text-align:right">Actual</th><th style="text-align:right">Error</th></tr></thead><tbody>
+     ${rows.map(r=>`<tr><td>${esc(nm(r.id))}${r.sub?` <span class="tag">sub</span>`:""}${r.qErr?` <span class="tag a">quantised ${r.qErr>0?"+":""}${r.qErr.toFixed(1)}%</span>`:""}</td>
+       <td class="n">${r.orig}</td><td class="n">${r.adj}</td>
+       <td class="n" style="color:var(--fg-3)">${r.scaleDiff>0?"+":""}${r.scaleDiff.toFixed(1)}%</td>
+       <td class="n">${r.act}</td>
+       <td class="n" style="color:${Math.abs(r.err)<=2?"var(--green)":Math.abs(r.err)<=6?"var(--amber)":"var(--red)"}">${r.act?(r.err>0?"+":"")+r.err.toFixed(1)+"%":"skipped"}</td></tr>`).join("")}
+     </tbody></table></div></div>
+   <div class="row"><button class="btn" id="again">Back to Decide</button>
+     <button class="btn ghost" id="tohub">See the data</button></div>`;
+  $("#again").onclick=()=>{C=null;go("decide")};
+  $("#tohub").onclick=()=>{C=null;go("hub")};
+}
+
+/* ══ RECIPE BOOK + IMPORT ══ */
+let DRAFT=null;
+function renderBook(){
+  if(DRAFT)return renderDraft();
+  const list=RECIPES().map(r=>{
+    const a=analyse(r),rt=ratingOf(r.id),n=cookCount(r.id);
+    const runs=S.log.filter(l=>l.id===r.id);
+    const mae=runs.length?runs.reduce((s,l)=>s+l.mae,0)/runs.length:null;
+    const tm=runs.length?runs.reduce((s,l)=>s+(l.totalMs||0),0)/runs.length:null;
+    const note=runs.filter(l=>l.rating&&l.rating.notes).slice(-1)[0];
+    return {r,a,rt,n,mae,tm,note:note?note.rating.notes:""}}).sort((x,y)=>y.n-x.n||y.a.cov-x.a.cov);
+  $("#v-book").innerHTML=`
+   <div class="between"><div class="col-sm"><span class="eyebrow">${list.length} recipes · ${S.log.length} cooks logged</span>
+     <h1>Recipe book</h1><p class="sub">Everything stored, with how often you've made it and how it went.</p></div>
+     <button class="btn amber" id="imp">Import a recipe</button></div>
+   <div class="col">${list.map(x=>`
+     <div class="sug ${x.n?"ready":""}" data-open="${x.r.id}" tabindex="0" role="button"><div class="edge"></div><div class="sug-in">
+       <div class="between"><h3>${esc(x.r.name)}</h3>
+         <span class="row" style="gap:9px"><span class="tag ${x.n?"g":""}">cooked ${x.n}×</span>
+           ${x.rt?`<span class="stars">${starStr(x.rt.overall)} <span class="note">${x.rt.overall.toFixed(1)}</span></span>`:`<span class="note">unrated</span>`}</span></div>
+       <div class="tags"><span class="tag">${esc(x.r.cuisine)}</span><span class="tag">${esc(x.r.meal)}</span>
+         <span class="tag">${esc(x.r.taste)}</span><span class="tag">${x.r.mins} min</span>
+         <span class="tag b">${x.r.stages.length} stages</span>${x.r.source?`<span class="tag a">imported</span>`:""}
+         <span class="tag ${x.a.missing.length?"":"g"}">${Math.round(x.a.cov*100)}% in stock</span></div>
+       <p class="why">${x.mae!=null?`avg error ${x.mae.toFixed(2)}% · avg ${fmtT(x.tm)}`:"never cooked"}${x.note?` · “${esc(x.note)}”`:""}</p>
+     </div></div>`).join("")}</div>`;
+  $("#imp").onclick=()=>{DRAFT={url:"",text:"",parsed:null};renderBook()};
+  $$("[data-open]").forEach(b=>b.onclick=()=>openBrief(b.dataset.open));
+}
+function parseText(txt){
+  const lines=txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const ing=[],steps=[];
+  const re=/^[-*•\d.)\s]*(\d+(?:[.,]\d+)?)\s*(kg|g|gram|grams|ml|l|tbsp|tsp|cups?|ea|x)?\s+(.{2,60})$/i;
+  lines.forEach(l=>{
+    const m=l.match(re);
+    if(m&&l.length<72){
+      let amt=parseFloat(m[1].replace(",","."));const u=(m[2]||"").toLowerCase();
+      if(u==="kg"||u==="l")amt*=1000;
+      if(u==="tbsp")amt*=15;if(u==="tsp")amt*=5;if(u.startsWith("cup"))amt*=240;
+      const name=m[3].replace(/^of\s+/i,"").trim();
+      const first=name.toLowerCase().split(/\s+/)[0];
+      const guess=Object.values(S.pantry).find(p=>{
+        const pf=p.name.toLowerCase().split(/\s+/);
+        return pf.includes(first)||name.toLowerCase().includes(pf[pf.length-1])});
+      ing.push({raw:l,amt:Math.round(amt),name,id:guess?guess.id:""});
+    } else if(l.length>25) steps.push(l);
+  });
+  return {ing,steps};
+}
+function renderDraft(){
+  const D=DRAFT;
+  $("#v-book").innerHTML=`
+   <div class="between"><div class="col-sm"><span class="eyebrow">Import</span><h1>Add a recipe</h1></div>
+     <button class="btn ghost sm" id="cancel">Cancel</button></div>
+   <div class="card pad col-sm"><span class="eyebrow">From a link</span>
+     <input id="url" placeholder="https://instagram.com/… · pinterest · youtube" value="${esc(D.url)}">
+     <p class="note">Fetching a page is the one thing this prototype genuinely cannot do by itself — a browser page can't read another site, and Instagram and Pinterest both block it outright. On the Pi that's the assistant's job: it fetches, transcribes the video or reads the caption, and hands back a draft you correct here. Until then, paste the text and the parser below does the structural work.</p></div>
+   <div class="card pad col-sm"><span class="eyebrow">Paste the recipe text</span>
+     <textarea id="txt" placeholder="500 g bread flour&#10;4 g instant yeast&#10;10 g sea salt&#10;60 ml olive oil&#10;&#10;Mix and rest 30 minutes.&#10;Bake at 220 C for 22 minutes.">${esc(D.text)}</textarea>
+     <button class="btn amber sm" id="parse" style="align-self:flex-start">Parse it</button></div>
+   ${D.parsed?draftForm(D.parsed):""}`;
+  $("#cancel").onclick=()=>{DRAFT=null;renderBook()};
+  $("#url").oninput=e=>D.url=e.target.value;
+  $("#txt").oninput=e=>D.text=e.target.value;
+  $("#parse").onclick=()=>{
+    const p=parseText(D.text);
+    if(!p.ing.length)return toast("No quantities found — one ingredient per line, amount first");
+    D.parsed={name:"",cuisine:"Italian",meal:"Dinner",taste:"Savoury",mins:30,
+      medium:"Stove top",vessel:"Saucepan",basis:p.ing[0].id||"",ing:p.ing,steps:p.steps};
+    renderBook()};
+  if(D.parsed)wireDraft();
+}
+function draftForm(p){
+  const opts=Object.values(S.pantry);
+  return `<div class="card pad col-sm"><span class="eyebrow">Review — everything here needs your eye</span>
+   <div class="row"><input id="dName" placeholder="Recipe name" value="${esc(p.name)}" style="flex:1;min-width:180px">
+     <input id="dMins" type="number" value="${p.mins}" style="width:92px" title="minutes"></div>
+   <div class="row">
+     <select id="dCuisine">${CUISINES.map(c=>`<option ${p.cuisine===c?"selected":""}>${c}</option>`).join("")}</select>
+     <select id="dMeal">${MEALS.map(c=>`<option ${p.meal===c?"selected":""}>${c}</option>`).join("")}</select>
+     <select id="dTaste">${TASTES.map(c=>`<option ${p.taste===c?"selected":""}>${c}</option>`).join("")}</select>
+     <select id="dMedium">${Object.keys(VESSELS).map(c=>`<option ${p.medium===c?"selected":""}>${c}</option>`).join("")}</select>
+     <select id="dVessel">${(VESSELS[p.medium]||[]).map(c=>`<option ${p.vessel===c?"selected":""}>${c}</option>`).join("")}</select></div>
+   <div class="tw"><table><thead><tr><th>Parsed line</th><th style="text-align:right">Amount</th><th>Maps to</th><th>Basis</th></tr></thead><tbody>
+     ${p.ing.map((g,k)=>`<tr class="${g.id?"":"warn"}"><td class="note">${esc(g.raw)}</td>
+       <td class="n"><input type="number" value="${g.amt}" data-amt="${k}" style="width:78px"></td>
+       <td><select data-map="${k}"><option value="">— unmatched —</option>
+         ${opts.map(o=>`<option value="${o.id}" ${g.id===o.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></td>
+       <td><input type="radio" name="basis" data-basis="${k}" ${p.basis&&p.basis===g.id?"checked":""}></td></tr>`).join("")}
+   </tbody></table></div>
+   <p class="note">Rows highlighted amber didn't match anything in your pantry — map them or they'll be dropped.</p>
+   <span class="eyebrow">Steps</span><textarea id="dSteps">${esc(p.steps.join("\n"))}</textarea>
+   <p class="note">Imported recipes land as one stage. Split them into parallel stages later — the cook board reads whatever structure you give it.</p>
+   <button class="btn amber" id="dSave" style="align-self:flex-start">Save to the recipe book</button></div>`;
+}
+function wireDraft(){
+  const p=DRAFT.parsed;
+  $$("[data-amt]").forEach(i=>i.oninput=()=>p.ing[+i.dataset.amt].amt=parseFloat(i.value)||0);
+  $$("[data-map]").forEach(s=>s.onchange=()=>{p.ing[+s.dataset.map].id=s.value;renderBook()});
+  $$("[data-basis]").forEach(r=>r.onchange=()=>{p.basis=p.ing[+r.dataset.basis].id});
+  $("#dMedium").onchange=e=>{p.medium=e.target.value;p.vessel=(VESSELS[p.medium]||["Board"])[0];renderBook()};
+  const bind=(id,key,num)=>{const el=$(id);if(el)el.oninput=el.onchange=()=>p[key]=num?(parseFloat(el.value)||30):el.value};
+  bind("#dName","name");bind("#dMins","mins",true);bind("#dCuisine","cuisine");
+  bind("#dMeal","meal");bind("#dTaste","taste");bind("#dVessel","vessel");
+  $("#dSteps").oninput=e=>p.steps=e.target.value.split(/\n/).map(x=>x.trim()).filter(Boolean);
+  $("#dSave").onclick=()=>{
+    const ing=p.ing.filter(g=>g.id);
+    if(!p.name)return toast("Give it a name");
+    if(!ing.length)return toast("Map at least one ingredient to your pantry");
+    const basis=p.basis||ing[0].id;
+    S.custom.push({id:"cx"+Date.now().toString(36),name:p.name,cuisine:p.cuisine,meal:p.meal,
+      taste:p.taste,mins:p.mins,themes:[],basis,source:DRAFT.url||"pasted",
+      stages:[{id:"main",name:"Everything",medium:p.medium,vessel:p.vessel,needs:[],
+        ing:ing.map(g=>({id:g.id,amt:g.amt,station:"direct"})),
+        steps:(p.steps.length?p.steps:["Cook it."]).map(t=>({t,mins:5}))}]});
+    save();DRAFT=null;renderBook();toast("Saved — it's in the book and in Decide")};
+}
+
+/* ══ PANTRY ══ */
+function renderPantry(){
+  const rows=Object.values(S.pantry).sort((a,b)=>
+    (a.expires?days(a.expires):9999)-(b.expires?days(b.expires):9999));
+  $("#v-pantry").innerHTML=`
+   <div class="col-sm"><span class="eyebrow">Inventory</span><h1>Pantry</h1>
+     <p class="sub">Days-of-supply comes from your own cook history. Items marked <span class="mono">est</span> run on a default rate until there's enough real data.</p></div>
+   ${S.intake.length?`<div class="banner blue"><b>${S.intake.length} queued from your last shop:</b>
+     ${S.intake.map(id=>esc(nm(id))).join(", ")}
+     <button class="btn sm amber" id="runIntake">Scan them now</button></div>`:""}
+   <div class="card pad col-sm"><span class="eyebrow">Scan &amp; weigh</span>
+     <div class="chips" id="cIntake"></div>
+     <p class="note"><b>Manual</b> asks you for the net weight of each item. <b>Automatic</b> assumes the barcode lookup returned the pack size and fills it in — that's what the real scanner will do, and having both lets you measure how often it's wrong.</p>
+     <div class="row"><button class="btn sm amber" id="scan">Scan one item</button>
+       <button class="btn sm ghost" id="csv">Copy CSV</button>
+       <button class="btn sm ghost" id="reset">Reset demo data</button></div></div>
+   <div class="tw"><table><thead><tr><th>Item</th><th>Tag</th><th>Class</th><th style="text-align:right">Qty</th>
+     <th style="text-align:right">Days left</th><th style="text-align:right">Supply</th></tr></thead><tbody>
+   ${rows.map(i=>{const n=i.expires?days(i.expires):null,s=supply(i.id);
+     const cls=n!==null&&n<0?"bad":n!==null&&n<=3?"warn":"";
+     const col=n===null?"var(--fg-3)":n<0?"var(--red)":n<=3?"var(--amber)":"var(--fg-3)";
+     return `<tr class="${cls}"><td><span class="dot" style="background:${i.qty<=i.low?"var(--red)":"var(--green)"}"></span>${esc(i.name)}
+       <div class="nl">${esc(i.nl)}</div></td>
+       <td class="note">${esc(i.tag)}</td><td class="note">${CLASSES[i.cls]||i.cls}</td>
+       <td class="n" style="color:${i.qty<=i.low?"var(--red)":"inherit"}">${i.qty}${i.unit}</td>
+       <td class="n" style="color:${col}">${n===null?"—":n<0?`${-n}d ago`:n===0?"today":n+"d"}</td>
+       <td class="n">${i.qty>0?(s.d>365?"1y+":Math.round(s.d)+"d"):"—"} <span class="note">${s.src==="measured"?"n="+s.n:"est"}</span></td></tr>`}).join("")}
+   </tbody></table></div>
+   <div class="card pad col-sm"><span class="eyebrow">Kit — appliances drive the medium filter, vessels drive parallel stages</span>
+     <div class="chips" id="apps"></div>
+     <div class="tw" style="margin-top:10px"><table><thead><tr><th>Vessel</th><th>Medium</th><th style="text-align:right">Own</th></tr></thead><tbody>
+       ${Object.entries(VESSELS).flatMap(([m,vs])=>vs.map(v=>`<tr><td>${esc(v)}</td><td class="note">${esc(m)}</td>
+         <td class="n"><input type="number" min="0" max="9" value="${S.kit[v]??0}" data-kit="${esc(v)}" style="width:64px"></td></tr>`)).join("")}
+     </tbody></table></div>
+     <p class="note">The cook board warns you when two stages wanting the same vessel are running at once.</p></div>
+   <div class="card pad col-sm"><span class="eyebrow">On weighing what you bought</span>
+     <p class="note">Don't weigh contents separately — keep a tare table. Open Food Facts returns net quantity for most EU products, so packaging tare is gross minus net, measured once per packaging type and reused. Decant into your own jar, weigh the empty jar once, save it as that container's tare. Same table a filling line keeps.</p></div>`;
+  chips("#cIntake",["manual","automatic"],o=>S.intakeMode===o,o=>S.intakeMode=o);
+  chips("#apps",S.appliances.map(a=>a.name),n=>S.appliances.find(a=>a.name===n).have,
+    n=>{const a=S.appliances.find(x=>x.name===n);a.have=!a.have});
+  $$("[data-kit]").forEach(i=>i.onchange=()=>{S.kit[i.dataset.kit]=Math.max(0,parseInt(i.value)||0);save()});
+  const ri=$("#runIntake");if(ri)ri.onclick=intakeRun;
+  $("#scan").onclick=()=>{const out=Object.values(S.pantry).filter(i=>i.qty<=0),low=lowStock();
+    const it=(out[0]||low[0]||Object.values(S.pantry)[0]);
+    const n=addStock(it.id);toast(`${it.name} +${n}${it.unit}`);renderPantry();renderBell()};
+  $("#csv").onclick=()=>{
+    const rows=[["id","name","nl","category","tag","class","qty","unit","purchased","expires","days_supply"],
+      ...Object.values(S.pantry).map(i=>[i.id,i.name,i.nl,i.cat,i.tag,i.cls,i.qty,i.unit,i.bought||"",i.expires||"",Math.round(supply(i.id).d)])];
+    navigator.clipboard?.writeText(rows.map(r=>r.join(",")).join("\n"))
+      .then(()=>toast("Pantry CSV copied"),()=>toast("Copy blocked by the browser"))};
+  $("#reset").onclick=()=>{if(confirm("Reset pantry, history, imported recipes and basket?")){
+    S=fresh();seedHistory();save();renderPantry();renderBell();toast("Reset")}};
+}
+function addStock(id,amt){const it=P(id);const n=amt==null?it.pack:amt;
+  it.qty=Math.round((it.qty+n)*10)/10;it.bought=iso(today);it.expires=iso(d(it.shelf));save();return n}
+function intakeRun(){
+  if(!S.intake.length){renderPantry();renderBell();return}
+  const id=S.intake[0],it=P(id);
+  if(S.intakeMode==="automatic"){
+    const n=addStock(id);S.intake=S.intake.slice(1);save();
+    toast(`${it.name} +${n}${it.unit} from barcode`);
+    if(S.intake.length)setTimeout(intakeRun,420);
+    else{renderPantry();renderBell();toast("Intake complete")}
+    return}
+  const v=prompt(`Scanning ${it.name} (${it.nl}).\n\nNet weight in ${it.unit}? Gross minus packaging tare.\n\n${S.intake.length-1} more after this — cancel to stop.`,it.pack);
+  if(v===null){renderPantry();renderBell();return}
+  const n=parseFloat(v);if(!isNaN(n))addStock(id,n);
+  S.intake=S.intake.slice(1);save();
+  if(S.intake.length)setTimeout(intakeRun,120);
+  else{renderPantry();renderBell();toast("Intake complete — pantry updated")}
+}
+
+/* ══ SHOP ══ */
+function renderShop(){
+  const low=lowStock(),unl=unlocks(),inB=id=>S.basket.includes(id);
+  const line=(id,right,sub)=>`<div class="shopitem"><input type="checkbox" data-b="${id}" ${inB(id)?"checked":""}>
+    <div><b>${esc(nm(id))}</b> <span class="nl">${esc(nlOf(id))}</span>${sub?`<div class="note">${sub}</div>`:""}</div>
+    <div style="text-align:right">${right}</div></div>`;
+  $("#v-shop").innerHTML=`
+   <div class="col-sm"><span class="eyebrow">Reorder · unlock · intake</span><h1>Shopping</h1>
+     <p class="sub">Tick as you shop. Confirm only what actually made it into the bag — the ticks are the list, the confirm is the truth.</p></div>
+   ${S.intake.length?`<div class="banner"><b>${S.intake.length} waiting to be scanned</b> — ${S.intake.map(id=>esc(nm(id))).join(", ")}
+     <button class="btn sm amber" id="goIntake">Scan them</button></div>`:""}
+   <div class="card pad col-sm"><span class="eyebrow">Need now — low or turning</span>
+     ${low.length?low.map(i=>line(i.id,
+       `<span class="tag ${i.expires&&days(i.expires)<=1?"r":"a"}">${i.qty<=i.low?"low":""} ${i.expires?days(i.expires)+"d":""}</span>
+        <div class="note mono">€${i.price.toFixed(2)}</div>`,
+       `${i.qty}${i.unit} left · ${Math.round(supply(i.id).d)}d supply`)).join(""):`<p class="note">Nothing urgent.</p>`}</div>
+   <div class="card pad col-sm"><span class="eyebrow">Highest ROI — recipes unlocked per euro</span>
+     ${unl.length?unl.map(u=>line(u.id,
+       `<span class="tag ${u.recipes.length>1?"g":""}">unlocks ${u.recipes.length}</span>
+        <div class="note mono">€${(P(u.id)?.price||0).toFixed(2)} · roi ${u.roi.toFixed(2)}</div>`,
+       `${esc(u.recipes.join(" · "))} — need ~${Math.round(u.need)}${un(u.id)}`)).join(""):`<p class="note">Nothing blocked.</p>`}</div>
+   <div class="card pad col-sm"><span class="eyebrow">Buy one thing</span>
+     ${unl[0]?`<p style="font-size:1.05rem">Buy <b>${esc(nm(unl[0].id))}</b> <span class="nl">${esc(nlOf(unl[0].id))}</span> — €${(P(unl[0].id)?.price||0).toFixed(2)} unlocks ${unl[0].recipes.length}.</p>
+       <p class="note">${esc(unl[0].recipes.join(" · "))}</p>`:`<p class="note">Nothing blocked.</p>`}</div>
+   <div class="row"><button class="btn amber" id="confirmBuy">Confirm what I actually bought (${S.basket.length})</button>
+     <button class="btn ghost sm" id="clearBasket">Clear ticks</button></div>`;
+  $$("[data-b]").forEach(c=>c.onchange=()=>{
+    S.basket=c.checked?[...new Set([...S.basket,c.dataset.b])]:S.basket.filter(x=>x!==c.dataset.b);
+    save();$("#confirmBuy").textContent=`Confirm what I actually bought (${S.basket.length})`});
+  $("#clearBasket").onclick=()=>{S.basket=[];save();renderShop()};
+  $("#confirmBuy").onclick=()=>{
+    if(!S.basket.length)return toast("Nothing ticked");
+    S.intake=[...new Set([...S.intake,...S.basket])];S.basket=[];save();renderShop();renderBell();
+    toast(`${S.intake.length} queued for intake`)};
+  const gi=$("#goIntake");if(gi)gi.onclick=()=>{go("pantry");setTimeout(intakeRun,80)};
+}
+
+/* ══ DATA ══ */
+function seedHistory(){
+  if(S.log.length)return;
+  const plan=[["pancakes",-34,"manual",3.1],["cacio",-29,"manual",4.4],["focaccia",-25,"manual",4.7],
+    ["pomodoro",-21,"auto",4.2],["shakshuka",-17,"manual",3.8],["congee",-13,"auto",4.6],
+    ["pancakes",-9,"auto",4.1],["flatbread",-6,"auto",3.4],["cacio",-3,"auto",4.8]];
+  let sd=7;const rnd=()=>{sd=(sd*9301+49297)%233280;return sd/233280};
+  plan.forEach(([id,ago,mode,rating],k)=>{
+    const r=BUILTIN.find(x=>x.id===id);if(!r)return;
+    const drift=mode==="manual"?5.2:2.4,learn=1-k*.055;
+    const errors={},actual={},classErr={},byC={};
+    allIng(r).forEach(i=>{
+      const base=drift*learn*(P(i.id)?.integer?1.9:1)*(1+(rnd()-.5));
+      const e=(rnd()<.5?-1:1)*Math.abs(base);
+      errors[i.id]=Math.round(e*100)/100;actual[i.id]=Math.round(i.amt*(1+e/100)*10)/10;
+      const c=P(i.id)?.cls||"other";(byC[c]=byC[c]||[]).push(Math.abs(e))});
+    Object.entries(byC).forEach(([c,v])=>classErr[c]=v.reduce((a,b)=>a+b,0)/v.length);
+    const mae=Object.values(errors).reduce((s,e)=>s+Math.abs(e),0)/Object.keys(errors).length;
+    S.log.push({id,name:r.name,date:iso(d(ago)),ts:today.getTime()+ago*DAY,mode,factor:1,
+      mae:Math.round(mae*100)/100,totalMs:r.mins*60000*(.8+rnd()*.5),
+      breakMs:rnd()<.3?rnd()*400000:0,stageMs:{},
+      rating:{taste:rating,texture:Math.min(5,Math.max(0,rating+(rnd()-.5))),again:rating,notes:""},
+      actual,errors,classErr,subs:{}})});
+  save();
+}
+const tipEl=()=>$("#tip");
+function hov(el,text){
+  const mv=e=>{const t=tipEl();t.style.left=(e.clientX+13)+"px";t.style.top=(e.clientY-11)+"px"};
+  el.addEventListener("pointerenter",e=>{const t=tipEl();t.textContent=text;t.classList.add("on");mv(e)});
+  el.addEventListener("pointermove",mv);
+  el.addEventListener("pointerleave",()=>tipEl().classList.remove("on"));
+}
+function barChart(host,data,{unit="%",color="var(--c1)",fmt=v=>v.toFixed(2),colorOf=null}={}){
+  if(!host||!data.length)return;
+  const W=560,rowH=27,PL=124,PR=62,H=data.length*rowH+22;
+  const max=Math.max(...data.map(x=>x.v))*1.15||1,x=v=>PL+(v/max)*(W-PL-PR);
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img">
+    ${[0,.25,.5,.75,1].map(f=>`<line class="gl" x1="${x(max*f)}" y1="6" x2="${x(max*f)}" y2="${H-16}"/>`).join("")}
+    ${data.map((dd,i)=>{const y=8+i*rowH,w=Math.max(x(dd.v)-PL,2);
+      return `<g><text class="ax" x="${PL-9}" y="${y+14}" text-anchor="end">${esc(dd.k)}</text>
+        <rect x="${PL}" y="${y+4}" width="${w}" height="15" rx="4" fill="${colorOf?colorOf(dd):color}"/>
+        <text class="dl" x="${PL+w+7}" y="${y+16}">${fmt(dd.v)}${unit}${dd.flag?" "+dd.flag:""}</text>
+        <rect class="hit" x="${PL}" y="${y}" width="${W-PL}" height="${rowH}" data-t="${esc(dd.k)}: ${fmt(dd.v)}${unit}${dd.n?`\n${dd.n} observations`:""}"/></g>`}).join("")}
+    ${[0,max].map(v=>`<text class="ax" x="${x(v)}" y="${H-4}" text-anchor="middle">${v.toFixed(1)}</text>`).join("")}</svg>`;
+  host.querySelectorAll(".hit").forEach(r=>hov(r,r.dataset.t));
+}
+function groupChart(host,cats,series){
+  if(!host||!cats.length)return;
+  const W=560,H=196,PL=44,PB=40,PT=10,PR=10;
+  const max=Math.max(...series.flatMap(s=>s.v.filter(v=>v!=null)),1)*1.2;
+  const bw=(W-PL-PR)/cats.length,iw=Math.min(20,(bw-14)/series.length),y=v=>PT+(1-v/max)*(H-PT-PB);
+  let g="";
+  cats.forEach((c,i)=>{series.forEach((s,j)=>{const v=s.v[i];if(v==null)return;
+    const x=PL+i*bw+(bw-iw*series.length-2*(series.length-1))/2+j*(iw+2),h=Math.max(H-PB-y(v),2);
+    g+=`<rect x="${x}" y="${y(v)}" width="${iw}" height="${h}" rx="4" fill="${s.c}"/>
+        <text class="dl" x="${x+iw/2}" y="${y(v)-5}" text-anchor="middle">${v.toFixed(1)}</text>
+        <rect class="hit" x="${x}" y="${PT}" width="${iw}" height="${H-PB-PT}" data-t="${esc(s.n)} · ${esc(c)}\n${v.toFixed(2)}% mean abs error"/>`});
+    g+=`<text class="ax" x="${PL+i*bw+bw/2}" y="${H-PB+15}" text-anchor="middle">${esc(cats[i])}</text>`});
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img">
+    ${[0,.5,1].map(f=>`<line class="gl" x1="${PL}" y1="${y(max*f)}" x2="${W-PR}" y2="${y(max*f)}"/>
+      <text class="ax" x="${PL-7}" y="${y(max*f)+3}" text-anchor="end">${(max*f).toFixed(0)}%</text>`).join("")}${g}</svg>`;
+  host.querySelectorAll(".hit").forEach(r=>hov(r,r.dataset.t));
+}
+function lineChart(host,pts){
+  if(!host||pts.length<2)return;
+  const W=560,H=190,PL=40,PB=34,PT=14,PR=14;
+  const max=Math.max(...pts.map(p=>p.v))*1.3||1;
+  const x=i=>PL+(i/(pts.length-1))*(W-PL-PR),y=v=>PT+(1-v/max)*(H-PT-PB);
+  const path=pts.map((p,i)=>`${i?"L":"M"}${x(i)},${y(p.v)}`).join(" ");
+  const n=pts.length,sx=pts.reduce((s,_,i)=>s+i,0),sy=pts.reduce((s,p)=>s+p.v,0);
+  const sxy=pts.reduce((s,p,i)=>s+i*p.v,0),sxx=pts.reduce((s,_,i)=>s+i*i,0);
+  const m=(n*sxy-sx*sy)/(n*sxx-sx*sx||1),b=(sy-m*sx)/n;
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img">
+    ${[0,.5,1].map(f=>`<line class="gl" x1="${PL}" y1="${y(max*f)}" x2="${W-PR}" y2="${y(max*f)}"/>
+      <text class="ax" x="${PL-7}" y="${y(max*f)+3}" text-anchor="end">${(max*f).toFixed(0)}%</text>`).join("")}
+    <line x1="${x(0)}" y1="${y(b)}" x2="${x(n-1)}" y2="${y(m*(n-1)+b)}" stroke="var(--fg-3)" stroke-width="2" stroke-dasharray="5 4"/>
+    <path d="${path}" fill="none" stroke="var(--c1)" stroke-width="2" stroke-linejoin="round"/>
+    ${pts.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.v)}" r="4.5" fill="var(--c1)" stroke="var(--panel)" stroke-width="2"/>
+      <rect class="hit" x="${x(i)-14}" y="${PT}" width="28" height="${H-PB-PT}" data-t="${esc(p.k)}\n${p.v.toFixed(2)}% · ${esc(p.m)}"/>`).join("")}
+    <text class="ax" x="${PL}" y="${H-12}">oldest</text><text class="ax" x="${W-PR}" y="${H-12}" text-anchor="end">newest</text>
+    <text class="dl" x="${W-PR}" y="${PT+2}" text-anchor="end">trend ${m<0?"improving":"worsening"} ${Math.abs(m).toFixed(2)}% per cook</text></svg>`;
+  host.querySelectorAll(".hit").forEach(r=>hov(r,r.dataset.t));
+}
+function renderHub(){
+  const L=S.log;
+  if(!L.length){$("#v-hub").innerHTML=`<div class="card empty">No cooks logged yet.</div>`;return}
+  const mae=L.reduce((s,l)=>s+l.mae,0)/L.length,best=Math.min(...L.map(l=>l.mae));
+  const activeMs=L.reduce((s,l)=>s+(l.totalMs||0),0);
+  const rated=L.filter(l=>l.rating);
+  const avgR=rated.length?rated.reduce((s,l)=>s+(l.rating.taste+l.rating.texture+l.rating.again)/3,0)/rated.length:null;
+  const cls={};L.forEach(l=>Object.entries(l.classErr||{}).forEach(([k,v])=>(cls[k]=cls[k]||[]).push(v)));
+  const clsData=Object.entries(cls).map(([k,v])=>({k:CLASSES[k]||k,v:v.reduce((a,b)=>a+b,0)/v.length,n:v.length})).sort((a,b)=>b.v-a.v);
+  const shared=clsData.slice(0,5).map(c=>c.k);
+  const series=["manual","auto"].map((m,i)=>({n:m,c:i?"var(--c2)":"var(--c1)",
+    v:shared.map(kk=>{const vals=L.filter(l=>l.mode===m).flatMap(l=>Object.entries(l.classErr||{})
+      .filter(([k])=>(CLASSES[k]||k)===kk).map(([,v])=>v));
+      return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null})}));
+  const use={};L.forEach(l=>Object.entries(l.actual||{}).forEach(([k,v])=>use[k]=(use[k]||0)+v));
+  const useData=Object.entries(use).map(([k,v])=>({k:nm(k),v})).sort((a,b)=>b.v-a.v).slice(0,9);
+  const sup=Object.values(S.pantry).filter(i=>i.qty>0).map(i=>({k:i.name,...supply(i.id)})).sort((a,b)=>a.d-b.d).slice(0,9);
+  const rated2=RECIPES().map(r=>({k:r.name,rt:ratingOf(r.id)})).filter(x=>x.rt)
+    .map(x=>({k:x.k,v:x.rt.overall,n:x.rt.n})).sort((a,b)=>b.v-a.v);
+  $("#v-hub").innerHTML=`
+   <div class="col-sm"><span class="eyebrow">Everything the kitchen has recorded</span><h1>Data</h1>
+     <p class="sub">${L.length} cooks.${S.demo?" Includes nine seeded historical cooks so the charts have something to say — clear them on the Pantry tab.":""}</p></div>
+   <div class="tiles">
+     <div class="tile"><span class="v">${L.length}</span><span class="k">Cooks logged</span></div>
+     <div class="tile"><span class="v" style="color:${mae<4?"var(--green)":"var(--amber)"}">${mae.toFixed(2)}%</span><span class="k">Mean abs error</span></div>
+     <div class="tile"><span class="v" style="color:var(--green)">${best.toFixed(2)}%</span><span class="k">Best cook</span></div>
+     <div class="tile"><span class="v">${avgR?avgR.toFixed(1):"—"}</span><span class="k">Avg rating</span></div>
+     <div class="tile"><span class="v">${Math.round(activeMs/60000)}m</span><span class="k">Time at the bench</span></div></div>
+   <div class="chartcard"><div class="charthead"><h3>Accuracy per cook, oldest to newest</h3>
+     <span class="note">Mean absolute error across every weighed ingredient. The dashed line is a least-squares fit — this becomes your learning-curve study.</span></div><div id="ch-trend"></div></div>
+   <div class="chartcard"><div class="charthead"><h3>Variance by ingredient class</h3>
+     <span class="note">Which kinds of ingredient you measure badly. Small targets with coarse tolerance are always worst.</span></div><div id="ch-class"></div></div>
+   <div class="chartcard"><div class="charthead"><h3>Manual entry versus scale-driven</h3>
+     <span class="note">The comparison that justifies building the rig. If auto isn't beating manual, the hardware isn't earning its bench space.</span></div>
+     <div id="ch-mode"></div><div class="legend">${series.map(s=>`<span><i class="swatch" style="background:${s.c}"></i>${s.n}</span>`).join("")}</div></div>
+   ${rated2.length?`<div class="chartcard"><div class="charthead"><h3>How things actually tasted</h3>
+     <span class="note">Your own ratings, averaged per recipe out of 5. These push good recipes up the Decide list.</span></div><div id="ch-rate"></div></div>`:""}
+   <div class="chartcard"><div class="charthead"><h3>Days of supply remaining</h3>
+     <span class="note">Quantity over measured consumption rate. Under 7 days is flagged; estimated rates are marked.</span></div><div id="ch-sup"></div></div>
+   <div class="chartcard"><div class="charthead"><h3>Total consumed, all cooks</h3>
+     <span class="note">Feeds the reorder-point maths and shows which staples carry your cooking.</span></div><div id="ch-use"></div></div>
+   <div class="col-sm"><span class="eyebrow">Every cook</span>
+     <div class="tw"><table><thead><tr><th>Recipe</th><th>Date</th><th>Mode</th><th>Theme</th>
+       <th style="text-align:right">Rating</th><th style="text-align:right">MAE</th><th style="text-align:right">Time</th><th style="text-align:right">Break</th><th></th></tr></thead><tbody>
+     ${[...L].reverse().map(l=>`<tr><td>${esc(l.name)}</td><td class="note mono">${l.date}</td>
+       <td><span class="tag ${l.mode==="auto"?"b":""}">${l.mode}</span></td><td class="note">${esc(l.theme||"—")}</td>
+       <td class="n">${l.rating?((l.rating.taste+l.rating.texture+l.rating.again)/3).toFixed(1):"—"}</td>
+       <td class="n" style="color:${l.mae<3?"var(--green)":l.mae<6?"var(--amber)":"var(--red)"}">${l.mae.toFixed(2)}%</td>
+       <td class="n">${fmtT(l.totalMs||0)}</td><td class="n note">${l.breakMs?fmtT(l.breakMs):"—"}</td>
+       <td><button class="btn ghost sm" data-again="${l.id}">again</button></td></tr>`).join("")}
+     </tbody></table></div></div>
+   <button class="btn ghost sm" id="exportLog" style="align-self:flex-start">Copy full log as CSV</button>`;
+  lineChart($("#ch-trend"),L.map(l=>({k:l.name+" · "+l.date,v:l.mae,m:l.mode})));
+  barChart($("#ch-class"),clsData,{});
+  groupChart($("#ch-mode"),shared,series);
+  if(rated2.length)barChart($("#ch-rate"),rated2,{unit:"",fmt:v=>v.toFixed(1),color:"var(--c3)"});
+  barChart($("#ch-sup"),sup.map(s=>({k:s.k,v:Math.min(s.d,120),n:s.src==="measured"?s.n:0,
+      flag:(s.d<7?"· reorder":s.d<14?"· soon":"")+(s.src==="measured"?"":" · est")})),
+    {unit:"d",fmt:v=>v>=120?"120+":v.toFixed(0),colorOf:x=>x.v<7?"var(--red)":x.v<14?"var(--amber)":"var(--c3)"});
+  barChart($("#ch-use"),useData,{unit:"",fmt:v=>v.toFixed(0),color:"var(--c2)"});
+  $$("[data-again]").forEach(b=>b.onclick=()=>openBrief(b.dataset.again));
+  $("#exportLog").onclick=()=>{
+    const rows=[["date","recipe","mode","theme","scale_factor","mae_pct","rating","total_s","break_s"],
+      ...L.map(l=>[l.date,l.name,l.mode,l.theme||"",l.factor,l.mae,
+        l.rating?((l.rating.taste+l.rating.texture+l.rating.again)/3).toFixed(2):"",
+        Math.round((l.totalMs||0)/1000),Math.round((l.breakMs||0)/1000)])];
+    navigator.clipboard?.writeText(rows.map(r=>r.join(",")).join("\n"))
+      .then(()=>toast("Log CSV copied"),()=>toast("Copy blocked by the browser"))};
+}
+(async function boot(){
+  const q=new URLSearchParams(location.search);
+  const shared=(q.get("url")||q.get("text")||"").trim();
+  if(window.MiseAPI){
+    const seeded=await MiseAPI.boot(S);
+    if(seeded)S=seeded;
+    MiseAPI.on((ev,d)=>{
+      if(ev==="offline")toast("Server unreachable — working locally, will not sync");
+      if(ev==="merged")toast("Another device had newer data — merged");
+      if(ev==="saveFailed")toast("Could not save to the server");
+    });
+  }
+  if(!S.pantry||!Object.keys(S.pantry).length)S=fresh();
+  seedHistory();renderBell();
+  if(shared){DRAFT={url:/^https?:/i.test(shared)?shared:"",text:/^https?:/i.test(shared)?"":shared,parsed:null};go("book");}
+  else renderDecide();
+})();
+</script>

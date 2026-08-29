@@ -1,0 +1,22 @@
+[Unit]
+Description=Mise kitchen server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=connor
+WorkingDirectory=/home/connor/mise
+EnvironmentFile=-/home/connor/mise/.env
+ExecStart=/home/connor/mise/.venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+# The database lives under WorkingDirectory/data. Keep it writable and
+# everything else read-only — this is a kitchen appliance, not a dev box.
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
