@@ -94,3 +94,58 @@ def test_provider_error_carries_the_reason():
         assert e.status == 404
         assert "not found" in str(e)
         assert "doesn't exist" in str(e)      # the plain-language hint
+
+
+def test_mismatched_model_override_is_ignored(monkeypatch):
+    """A Claude model name left in .env must not be sent to Gemini."""
+    import importlib
+    from server import assistant
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("MISE_MODEL", "claude-sonnet-4-5")
+    var, key, url, model = assistant.which_provider()
+    assert var == "GEMINI_API_KEY"
+    assert model == "gemini-2.5-flash", model
+    warn = assistant.provider_warning()
+    assert warn and "claude-sonnet-4-5" in warn and "Gemini" in warn
+
+
+def test_matching_model_override_is_honoured(monkeypatch):
+    from server import assistant
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("MISE_MODEL", "gemini-3.7-flash")
+    assert assistant.which_provider()[3] == "gemini-3.7-flash"
+    assert assistant.provider_warning() is None
+
+
+def test_unknown_model_names_are_left_alone(monkeypatch):
+    """Don't second-guess a name we have no opinion about."""
+    from server import assistant
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    monkeypatch.setenv("MISE_MODEL", "llama-4-maverick")
+    assert assistant.which_provider()[3] == "llama-4-maverick"
+
+
+def test_ingredient_noun_strips_preparation():
+    from server.assistant import ingredient_noun
+    assert ingredient_noun("White Onion, sliced") == "White Onion"
+    assert ingredient_noun("Green Onion, thinly sliced") == "Green Onion"
+    assert ingredient_noun("Chicken Breast, boneless, skinless. Thinly sliced") == "Chicken Breast"
+    assert ingredient_noun("Bread flour") == "Bread flour"          # nothing to strip
+    assert ingredient_noun("sliced") == "sliced"                    # never returns empty
+
+
+def test_long_ingredient_lines_are_not_demoted_to_steps():
+    """The 74-char cap used to turn the chicken into a cooking instruction."""
+    from server.assistant import regex_draft
+    d = regex_draft(
+        "1 Chicken Breast, boneless, skinless. Thinly sliced (Can use thigh as well)\n"
+        "1/4 White Onion, sliced (about 1/4 cup)\n"
+        "0.5 cup Dashi Broth (can use Hondashi seasoning)\n"
+        "\nMix the dashi and simmer the onion in it until soft.")
+    ing = d.stages[0].ing
+    assert len(ing) == 3, [g.name for g in ing]
+    assert ing[0].name.startswith("Chicken Breast")
+    assert len(d.stages[0].steps) == 1

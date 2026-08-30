@@ -57,6 +57,28 @@ def to_base(amt: float, unit: str) -> tuple[float, str]:
 
 
 # ── pantry matching (deterministic) ─────────────────────────────────────────
+PREP_RE = re.compile(
+    r"[,;.]?\s*\b(?:thinly |finely |roughly |coarsely |freshly |very )?"
+    r"(?:sliced|diced|chopped|minced|grated|whisked|beaten|shredded|julienned|"
+    r"crushed|peeled|cubed|halved|quartered|trimmed|rinsed|drained|cooked|"
+    r"boneless|skinless|softened|melted|room temperature|to taste|optional)\b\.?",
+    re.I)
+
+
+def ingredient_noun(name: str) -> str:
+    """Strip preparation from an ingredient name.
+
+    "White Onion, sliced" and "Green Onion, thinly sliced" are the same pantry
+    item as "onion" — the prep belongs in the step, not on the shelf. Used when
+    creating a pantry row, never when displaying the source line.
+    """
+    out = PREP_RE.sub("", name)
+    out = re.sub(r"\s*\([^)]*\)", "", out)
+    out = re.sub(r"[,;.]\s*$", "", out).strip(" ,.;")
+    out = re.sub(r"\s{2,}", " ", out)
+    return out or name
+
+
 def _norm(s: str) -> str:
     s = unicodedata.normalize("NFKD", s.lower())
     s = "".join(c for c in s if not unicodedata.combining(c))
@@ -329,16 +351,50 @@ PROVIDERS = {
 }
 
 
+# A model name belongs to exactly one vendor. MISE_MODEL left over from a
+# previous provider is the single most confusing failure mode here: the key is
+# valid, the endpoint is right, and the provider 404s on a name it has never
+# heard of. So an override that plainly belongs elsewhere is ignored.
+MODEL_OWNER = {"claude": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY",
+               "gpt": "OPENAI_API_KEY", "o1": "OPENAI_API_KEY", "o3": "OPENAI_API_KEY"}
+
+
+def _model_for(var: str, default_model: str) -> tuple[str, str | None]:
+    """Returns (model, warning). The override wins unless it's for another vendor."""
+    override = os.getenv("MISE_MODEL", "").strip()
+    if not override:
+        return default_model, None
+    for prefix, owner in MODEL_OWNER.items():
+        if override.lower().startswith(prefix) and owner != var:
+            return default_model, (
+                f"MISE_MODEL is set to '{override}', which is a "
+                f"{owner.replace('_API_KEY', '').title()} model — but your key is "
+                f"{var.replace('_API_KEY', '').title()}. Ignoring it and using "
+                f"'{default_model}'. Remove or fix the MISE_MODEL line in .env.")
+    return override, None
+
+
 def which_provider() -> tuple[str, str, str, str] | None:
     """Returns (env_var_name, key, url, model), or None if nothing is configured."""
     if os.getenv("ANTHROPIC_API_KEY"):
+        model, _ = _model_for("ANTHROPIC_API_KEY", "claude-sonnet-4-5")
         return ("ANTHROPIC_API_KEY", os.environ["ANTHROPIC_API_KEY"],
-                "https://api.anthropic.com/v1/messages",
-                os.getenv("MISE_MODEL", "claude-sonnet-4-5"))
+                "https://api.anthropic.com/v1/messages", model)
     for var, (url, default_model) in PROVIDERS.items():
         key = os.getenv(var)
         if key:
-            return (var, key, url, os.getenv("MISE_MODEL", default_model))
+            model, _ = _model_for(var, default_model)
+            return (var, key, url, model)
+    return None
+
+
+def provider_warning() -> str | None:
+    """The mismatch note, if there is one — surfaced by /api/assist/health."""
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return _model_for("ANTHROPIC_API_KEY", "claude-sonnet-4-5")[1]
+    for var, (url, default_model) in PROVIDERS.items():
+        if os.getenv(var):
+            return _model_for(var, default_model)[1]
     return None
 
 
@@ -449,8 +505,11 @@ def regex_draft(text: str) -> RecipeDraft:
     for line in (l.strip() for l in text.splitlines()):
         if not line:
             continue
+        # An ingredient line starts with a quantity. A step is prose. Length is
+        # not the difference between them — a long ingredient line is still an
+        # ingredient line, and capping it is how the chicken ends up as a step.
         p = _parse_ing_line(line)
-        if p and len(line) < 74:
+        if p:
             ings.append(p)
         elif len(line) > 22:
             steps.append({"t": line[:400], "mins": 5})
@@ -555,6 +614,9 @@ def resolve(draft: RecipeDraft, pantry: dict[str, dict[str, Any]]
                 base_amt = g.amt          # "2 lemons" not "2 g lemons"
                 base_unit = "ea"
             matched.append({"stage": st.name, "raw": g.raw or g.name, "name": g.name,
+                            # what this would be called on a shelf, if you have
+                            # to create it: the thing, without the prep
+                            "noun": ingredient_noun(g.name),
                             "amt": base_amt, "unit": base_unit, "srcAmt": g.amt,
                             "srcUnit": g.unit, "id": pid, "score": score,
                             "station": g.station, "optional": g.optional})

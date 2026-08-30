@@ -1054,7 +1054,9 @@ function parseText(txt){
       if(u==="kg"||u==="l")amt*=1000;
       if(u==="tbsp")amt*=15;if(u==="tsp")amt*=5;if(u.startsWith("cup"))amt*=240;
       const name=m[3].replace(/^of\s+/i,"").trim();
-      ing.push({raw:l,amt:Math.round(amt),unit:"g",name,id:guessPantry(name)});
+      ing.push({raw:l,amt:Math.round(amt),unit:"g",name,noun:name.replace(/\s*\([^)]*\)/g,"")
+        .replace(/[,;.]?\s*\b(thinly |finely |roughly )?(sliced|diced|chopped|minced|grated|whisked|beaten|peeled|cooked|boneless|skinless|optional)\b\.?/gi,"")
+        .replace(/[,;.]\s*$/,"").trim(),id:guessPantry(name)});
     } else if(l.length>25) steps.push(l);
   });
   return {ing,steps};
@@ -1080,7 +1082,8 @@ function draftFromServer(res){
       name:st.name||"Everything", medium:st.medium||"Stove top",
       vessel:st.vessel||"Saucepan", needs:st.needs||[],
       ing:(st.ing||[]).map(g=>{ const mm=m[k++]||{};
-        return {raw:g.raw||g.name, name:g.name, amt:Math.round((mm.amt!=null?mm.amt:g.amt)*10)/10,
+        return {raw:g.raw||g.name, name:g.name, noun:mm.noun||g.name,
+                amt:Math.round((mm.amt!=null?mm.amt:g.amt)*10)/10,
                 unit:mm.unit||g.unit||"g", id:mm.id||"", station:g.station||"prep",
                 score:mm.score||0}; }),
       steps:(st.steps||[]).map(x=>typeof x==="string"?x:x.t)
@@ -1215,11 +1218,13 @@ function draftForm(p){
          ${p.stages.length>1?`<button class="btn ghost sm" data-sdel="${si}">Remove stage</button>`:""}</div>
        ${p.stages.length>1?`<p class="note">Runs after: ${st.needs.length?esc(st.needs.join(", ")):"nothing — it can start immediately"}</p>`:""}
        <div class="tw"><table><thead><tr><th>Source line</th><th style="text-align:right">Amount</th><th>Unit</th><th>Maps to</th><th>Basis</th><th></th></tr></thead><tbody>
-         ${st.ing.map((g,k)=>`<tr class="${g.id?"":"warn"}">
+         ${st.ing.map((g,k)=>`<tr class="${g.id?"":(g.create?"":"warn")}">
            <td class="note">${esc(g.raw||g.name)}</td>
            <td class="n"><input type="number" step="0.1" value="${g.amt}" data-amt="${si}.${k}" style="width:80px"></td>
            <td class="note mono">${esc(g.unit||"g")}</td>
-           <td><select data-map="${si}.${k}"><option value="">— unmatched —</option>
+           <td><select data-map="${si}.${k}">
+             <option value="" ${!g.id&&!g.create?"selected":""}>— unmatched, will be dropped —</option>
+             <option value="__new__" ${g.create?"selected":""}>+ add “${esc(g.noun||g.name)}” to my pantry (0 left)</option>
              ${opts.map(o=>`<option value="${o.id}" ${g.id===o.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></td>
            <td><input type="radio" name="basis" data-basis="${si}.${k}" ${p.basis&&p.basis===g.id?"checked":""}></td>
            <td><button class="btn ghost sm" data-idel="${si}.${k}" title="drop this row">×</button></td></tr>`).join("")}
@@ -1231,7 +1236,11 @@ function draftForm(p){
    <div class="row"><button class="btn ghost sm" id="dAddStage">Add a stage</button>
      ${DRAFT.editing&&(S.custom||[]).some(x=>x.id===DRAFT.editing)?`<button class="btn ghost sm" id="dDelete">Delete this recipe</button>`:""}
      <button class="btn amber" id="dSave">${DRAFT.editing?"Save changes":"Save to the recipe book"}</button></div>
-   <p class="note">Amber rows matched nothing you own. Map them or they'll be dropped on save.</p>
+   ${(()=>{const un=flatIng(p).filter(g=>!g.id&&!g.create).length;
+     return un?`<div class="row"><button class="btn ghost sm" id="dAddAll">Add all ${un} unmatched to my pantry</button></div>
+       <p class="note warn-t">${un} row${un>1?"s":""} matched nothing you own. Add them to the pantry — they'll sit at zero and turn up on the shopping list — or they'll be dropped on save.</p>`
+       :`<p class="note">Every row is accounted for.</p>`})()}
+   ${flatIng(p).some(g=>g.create)?`<p class="note">Rows marked <b>+ add</b> will be created in your pantry at 0 ${""}— the recipe keeps them, and Shop will tell you to buy them.</p>`:""}
    </div>
    ${assistPanel("draft")}`;
 }
@@ -1240,7 +1249,11 @@ function wireDraft(){
   const p=DRAFT.parsed;
   const at=k=>{const [a,b]=k.split(".").map(Number);return p.stages[a].ing[b]};
   $$("[data-amt]").forEach(i=>i.oninput=()=>at(i.dataset.amt).amt=parseFloat(i.value)||0);
-  $$("[data-map]").forEach(s=>s.onchange=()=>{at(s.dataset.map).id=s.value;renderBook()});
+  $$("[data-map]").forEach(s=>s.onchange=()=>{
+    const g=at(s.dataset.map);
+    if(s.value==="__new__"){ g.create=true; g.id=""; }
+    else { g.create=false; g.id=s.value; }
+    renderBook()});
   $$("[data-basis]").forEach(r=>r.onchange=()=>{p.basis=at(r.dataset.basis).id});
   $$("[data-idel]").forEach(b=>b.onclick=()=>{const[a,k]=b.dataset.idel.split(".").map(Number);
     p.stages[a].ing.splice(k,1);renderBook()});
@@ -1253,6 +1266,8 @@ function wireDraft(){
   $$("[data-sdel]").forEach(b=>b.onclick=()=>{p.stages.splice(+b.dataset.sdel,1);renderBook()});
   $("#dAddStage").onclick=()=>{p.stages.push({name:"New stage",medium:"Stove top",
     vessel:"Saucepan",needs:[],ing:[],steps:[]});renderBook()};
+  const aa=$("#dAddAll");
+  if(aa) aa.onclick=()=>{flatIng(p).forEach(g=>{if(!g.id)g.create=true});renderBook()};
   const bind=(id,key,num)=>{const el=$(id);if(el)el.oninput=el.onchange=()=>p[key]=num?(parseFloat(el.value)||30):el.value};
   bind("#dName","name");bind("#dMins","mins",true);bind("#dCuisine","cuisine");
   bind("#dMeal","meal");bind("#dTaste","taste");
@@ -1265,6 +1280,19 @@ function wireDraft(){
 function saveDraft(){
   const p=DRAFT.parsed;
   if(!p.name)return toast("Give it a name");
+
+  // Create pantry rows for anything marked "+ add", before the ids are needed.
+  let created=0;
+  p.stages.forEach(st=>st.ing.forEach(g=>{
+    if(g.create && !g.id){
+      const shelfName=g.noun||g.name;
+      const existing=Object.values(S.pantry).find(x=>x.name.toLowerCase()===shelfName.toLowerCase());
+      if(existing){ g.id=existing.id; }
+      else { const it=newPantryItem(shelfName,g.unit,g.amt); S.pantry[it.id]=it; g.id=it.id; created++; }
+      g.create=false;
+    }
+  }));
+
   const stages=p.stages.map((st,i)=>({
     id:"s"+i, name:st.name||("Stage "+(i+1)), medium:st.medium, vessel:st.vessel,
     needs:st.needs||[],
@@ -1282,7 +1310,7 @@ function saveDraft(){
   if(at>=0) S.custom[at]=rec; else S.custom.push(rec);
   if(DRAFT.hideBuiltin){ S.hidden=S.hidden||[]; if(!S.hidden.includes(DRAFT.hideBuiltin)) S.hidden.push(DRAFT.hideBuiltin); }
   save();DRAFT=null;renderBook();
-  toast(at>=0?"Updated":"Saved — it's in the book and in Decide");
+  toast((at>=0?"Updated":"Saved")+(created?` · ${created} new pantry item${created>1?"s":""} at zero`:""));
 }
 
 /* Open a saved recipe back into the same form. Editing a built-in saves a copy
@@ -1301,6 +1329,21 @@ function editRecipe(id){
           amt:g.amt,unit:(S.pantry[g.id]||{}).unit||"g",id:g.id,station:g.station||"direct"})),
         steps:st.steps.map(x=>x.t)}))}};
   renderBook();
+}
+
+/* An ingredient you don't own is still part of the recipe. Dropping it was the
+ * wrong call: the whole Shop tab is built to answer "what am I missing", and it
+ * can only answer that if the missing thing exists as a row at zero. So an
+ * unmatched ingredient becomes a real pantry item with qty 0, which makes it
+ * show up in coverage, in "unlocks N recipes", and on the shopping list. */
+function newPantryItem(name, unit, amt){
+  const id = "px" + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  const u  = ["g","ml","ea"].includes(unit) ? unit : (unit==="cup"||unit==="cups"||unit==="tbsp"||unit==="tsp" ? "g" : "ea");
+  return {id, name: name.replace(/^\w/, c=>c.toUpperCase()), nl:"", cat:"Other", tag:"",
+    cls:"condiment", qty:0, unit:u, integer:u==="ea", bought:null, expires:null,
+    shelf:180, low:0, sub:"",
+    // a pack size you'd plausibly buy — enough for the recipe, rounded up
+    price:0, pack: u==="ea" ? Math.max(1, Math.ceil(amt||1)) : Math.max(100, Math.ceil((amt||100)/50)*50)};
 }
 
 /* Deleting. A recipe you imported is yours to destroy; a built-in is hidden
@@ -1463,9 +1506,9 @@ async function applyProposal(D,scope){
   for(const op of (pr.pantry||[])){
     const it=S.pantry[op.id];
     if(op.op==="add"){
-      const id="px"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
-      S.pantry[id]={id,name:op.name,qty:op.qty||0,unit:op.unit||"g",cls:"condiment",
-        shelf:180,low:0,bought:iso(today),expires:null,integer:false};n++;
+      const fresh=newPantryItem(op.name,op.unit||"g",op.qty||0);
+      fresh.qty=op.qty||0; if(fresh.qty>0) fresh.bought=iso(today);
+      S.pantry[fresh.id]=fresh;n++;
     } else if(!it){ continue;
     } else if(op.op==="set_qty"){ it.qty=op.qty; if(window.MiseAPI)MiseAPI.adjustQty(it.id,null,{absolute:op.qty}); n++;
     } else if(op.op==="adjust"){ it.qty=Math.max(0,Math.round((it.qty+(op.qty||0))*10)/10);

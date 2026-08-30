@@ -276,6 +276,7 @@ async def assist_health(probe: bool = False) -> dict[str, Any]:
         "provider": prov[0].replace("_API_KEY", "").title() if prov else None,
         "model": prov[3] if prov else None,
         "yt_dlp": shutil.which("yt-dlp") is not None,
+        "warning": assistant.provider_warning(),
         "tiers": ["json-ld", "youtube-transcript", "page-text", "pasted-text", "regex"]}
     if probe:
         out["probe"] = await assistant.probe()
