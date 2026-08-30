@@ -32,7 +32,7 @@ mkdir -p data
 [ -f .env ] || { cp .env.example .env; echo "==> Created .env — put your API key in it"; }
 chmod 600 .env
 
-sed "s|/home/connor|$APP_DIR|g; s|User=connor|User=$USER_NAME|" scripts/mise.service \
+sed "s|/home/connor/mise|$APP_DIR|g; s|User=connor|User=$USER_NAME|" scripts/mise.service \
   | sudo tee /etc/systemd/system/mise.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable --now mise
