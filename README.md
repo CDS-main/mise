@@ -77,6 +77,28 @@ Two things deliberately bypass that path because they must never be lost:
 | `POST /api/cooks` | Append-only. A logged cook is data you cannot recreate. |
 | `PATCH /api/pantry/{id}` | Single-row read-modify-write under a lock. What the scale and the intake flow use. |
 
+### Getting a key — free is fine
+
+The assistant does one small job (messy text → structured JSON), so it does not
+need an expensive model. Set **one** key in `.env` and Mise detects which
+provider you meant:
+
+| Provider | Key | Free? |
+|---|---|---|
+| Google Gemini | `GEMINI_API_KEY` — [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | free tier, no card |
+| Groq | `GROQ_API_KEY` — [console.groq.com/keys](https://console.groq.com/keys) | free tier, no card |
+| Cerebras | `CEREBRAS_API_KEY` | free tier, no card |
+| OpenRouter | `OPENROUTER_API_KEY` | free models, low daily cap |
+| Anthropic | `ANTHROPIC_API_KEY` | paid |
+| OpenAI | `OPENAI_API_KEY` | paid |
+
+All of them except Anthropic speak the OpenAI chat-completions shape, so they
+share one code path — adding another is one row in `PROVIDERS`
+(`server/assistant.py`). `GET /api/assist/health` reports which one is live.
+
+Free tiers have daily caps. That is fine here: importing a recipe is a handful
+of calls a week, not a service under load.
+
 ### Where the model is allowed to be
 
 The assistant does exactly one job: **unstructured → structured, at the edges.**
@@ -137,6 +159,15 @@ phone, Mise opens with the caption prefilled, and the assistant works from that.
 `server/scale.py` runs simulated on a laptop and real on the Pi behind the same
 interface, so the UI never knows the difference and you can build everything
 before the hardware lands.
+
+**Pi 5 note:** `RPi.GPIO` does not work on a Raspberry Pi 5 — GPIO moved behind
+the RP1 southbridge and RPi.GPIO's SOC base-address probe fails. Install
+`rpi-lgpio` instead; it is a drop-in that registers itself as `RPi.GPIO`, so no
+code changes. Install it only when the cell is actually wired:
+
+```bash
+./.venv/bin/pip install hx711 rpi-lgpio
+```
 
 Wiring (HX711 → Pi 5):
 

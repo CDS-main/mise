@@ -44,9 +44,20 @@ class Scale:
         self._hw = None
         self._sim_target = 0.0            # simulator: where the pan is heading
         self._load_cal()
+        # Hardware init is allowed to fail. A missing or incompatible GPIO
+        # library must never take the whole application down — the scale is
+        # one feature, and everything else still works simulated.
+        # NOTE: RPi.GPIO does NOT work on a Raspberry Pi 5 (RP1 southbridge;
+        # its SOC base-address probe raises RuntimeError). Use rpi-lgpio,
+        # which is a drop-in replacement, when the cell is actually wired.
         if HAVE_HX711:
-            GPIO.setmode(GPIO.BCM)
-            self._hw = HX711(dout_pin=dout, pd_sck_pin=sck)
+            try:
+                GPIO.setmode(GPIO.BCM)
+                self._hw = HX711(dout_pin=dout, pd_sck_pin=sck)
+            except Exception as e:
+                print(f"[scale] hardware init failed ({type(e).__name__}: {e}) "
+                      f"— falling back to the simulator")
+                self._hw = None
         self._t = threading.Thread(target=self._loop, daemon=True)
         self._t.start()
 
@@ -101,7 +112,7 @@ class Scale:
 
     def status(self) -> dict:
         return {"grams": self.grams(), "stable": self.stable(),
-                "simulated": not HAVE_HX711, "sps": self.sps,
+                "simulated": self._hw is None, "sps": self.sps,
                 "offset": self.offset, "scale": self.scale}
 
     # ── simulator control (no-op on real hardware) ─────────────────────────

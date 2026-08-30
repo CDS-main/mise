@@ -226,9 +226,9 @@ svg{display:block;max-width:100%;overflow:visible}
 <script src="api.js"></script>
 <script>
 "use strict";
-const DAY=86400000, today=new Date(2026,7,27);
+const DAY=86400000, today=(()=>{const t=new Date();t.setHours(0,0,0,0);return t})();
 const d=n=>new Date(today.getTime()+n*DAY), days=x=>Math.round((new Date(x)-today)/DAY);
-const iso=dt=>dt.toISOString().slice(0,10), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const iso=dt=>[dt.getFullYear(),String(dt.getMonth()+1).padStart(2,"0"),String(dt.getDate()).padStart(2,"0")].join("-"), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const CLASSES={dust:"Dust",grain:"Grains",liquid:"Liquids",fat:"Fats & oils",dairy:"Dairy",
   protein:"Protein",produce:"Produce",condiment:"Condiments",sweetener:"Sweeteners",spice:"Spices",leavening:"Leavening"};
 const TASTES=["Savoury","Sweet","Sour","Salty","Bitter","Umami"];

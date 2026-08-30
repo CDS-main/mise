@@ -208,7 +208,7 @@ async def assist_adapt(body: AdaptRequest) -> dict[str, Any]:
     try:
         return await assistant.adapt(body.recipe, body.instruction, names)
     except RuntimeError:
-        raise HTTPException(503, "No ANTHROPIC_API_KEY configured on the server.")
+        raise HTTPException(503, "No model API key configured on the server — set one in .env.")
     except Exception as e:
         raise HTTPException(502, f"model call failed: {type(e).__name__}")
 
@@ -217,8 +217,10 @@ async def assist_adapt(body: AdaptRequest) -> dict[str, Any]:
 def assist_health() -> dict[str, Any]:
     import os
     import shutil
-    return {"model_key": bool(os.getenv("ANTHROPIC_API_KEY")),
-            "model": os.getenv("MISE_MODEL", "claude-sonnet-4-5"),
+    prov = assistant.which_provider()
+    return {"model_key": prov is not None,
+            "provider": prov[0].replace("_API_KEY", "").title() if prov else None,
+            "model": prov[3] if prov else None,
             "yt_dlp": shutil.which("yt-dlp") is not None,
             "tiers": ["json-ld", "youtube-transcript", "page-text", "pasted-text", "regex"]}
 

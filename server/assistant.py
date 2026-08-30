@@ -258,31 +258,103 @@ def _schema_hint() -> str:
     return json.dumps(RecipeDraft.model_json_schema(), separators=(",", ":"))[:3500]
 
 
-async def call_model(source_text: str, hint: str | None = None) -> RecipeDraft:
-    key = os.getenv("ANTHROPIC_API_KEY")
-    if not key:
-        raise RuntimeError("no-api-key")
-    model = os.getenv("MISE_MODEL", "claude-sonnet-4-5")
+# ── which model provider, and where it lives ────────────────────────────────
+#
+# The assistant does one job: unstructured text -> structured JSON. That job is
+# small enough that a free model does it well, so Mise is not tied to any one
+# vendor. Set ONE key in .env and the provider is picked automatically.
+#
+# Every provider below except Anthropic speaks the OpenAI chat-completions
+# shape, so they share a single code path. Adding another is one table row.
+PROVIDERS = {
+    # env var            base url                                              default model
+    "GROQ_API_KEY":      ("https://api.groq.com/openai/v1/chat/completions",
+                          "llama-3.3-70b-versatile"),
+    "GEMINI_API_KEY":    ("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                          "gemini-2.5-flash"),
+    "CEREBRAS_API_KEY":  ("https://api.cerebras.ai/v1/chat/completions",
+                          "llama-3.3-70b"),
+    "OPENROUTER_API_KEY": ("https://openrouter.ai/api/v1/chat/completions",
+                          "meta-llama/llama-3.3-70b-instruct:free"),
+    "OPENAI_API_KEY":    ("https://api.openai.com/v1/chat/completions",
+                          "gpt-4o-mini"),
+}
+
+
+def which_provider() -> tuple[str, str, str, str] | None:
+    """Returns (env_var_name, key, url, model), or None if nothing is configured."""
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return ("ANTHROPIC_API_KEY", os.environ["ANTHROPIC_API_KEY"],
+                "https://api.anthropic.com/v1/messages",
+                os.getenv("MISE_MODEL", "claude-sonnet-4-5"))
+    for var, (url, default_model) in PROVIDERS.items():
+        key = os.getenv(var)
+        if key:
+            return (var, key, url, os.getenv("MISE_MODEL", default_model))
+    return None
+
+
+def _build_prompt(source_text: str, hint: str | None) -> str:
     user = f"Source:\n\n{source_text[:14000]}"
     if hint:
         user += f"\n\nThe cook adds: {hint}"
     user += f"\n\nMatch this JSON schema exactly:\n{_schema_hint()}"
-    async with httpx.AsyncClient(timeout=90) as cl:
-        r = await cl.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": key, "anthropic-version": "2023-06-01",
-                     "content-type": "application/json"},
-            json={"model": model, "max_tokens": 3000, "system": SYSTEM,
-                  "messages": [{"role": "user", "content": user}]},
-        )
-        r.raise_for_status()
-        body = r.json()
-    text = "".join(b.get("text", "") for b in body.get("content", []))
+    return user
+
+
+def _extract_json(text: str) -> RecipeDraft:
+    """Whatever the model wrapped its answer in, find the object and validate it.
+
+    Validation is the whole point: a model that invents a negative quantity or
+    drops a required field fails here, before anything reaches the UI.
+    """
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end < 0:
         raise ValueError("model returned no JSON object")
-    return RecipeDraft.model_validate_json(text[start:end + 1])   # rejects anything malformed
+    return RecipeDraft.model_validate_json(text[start:end + 1])
+
+
+async def call_model(source_text: str, hint: str | None = None) -> RecipeDraft:
+    prov = which_provider()
+    if not prov:
+        raise RuntimeError("no-api-key")
+    var, key, url, model = prov
+    user = _build_prompt(source_text, hint)
+
+    async with httpx.AsyncClient(timeout=90) as cl:
+        if var == "ANTHROPIC_API_KEY":
+            r = await cl.post(url, headers={
+                "x-api-key": key, "anthropic-version": "2023-06-01",
+                "content-type": "application/json"},
+                json={"model": model, "max_tokens": 3000, "system": SYSTEM,
+                      "messages": [{"role": "user", "content": user}]})
+            r.raise_for_status()
+            body = r.json()
+            text = "".join(b.get("text", "") for b in body.get("content", []))
+        else:
+            payload = {
+                "model": model,
+                "max_tokens": 3000,
+                "messages": [{"role": "system", "content": SYSTEM},
+                             {"role": "user", "content": user}],
+                "response_format": {"type": "json_object"},
+            }
+            r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
+                                            "Content-Type": "application/json"},
+                              json=payload)
+            if r.status_code == 400:
+                # not every provider supports forced JSON mode. the prompt already
+                # asks for bare JSON, and _extract_json copes either way.
+                payload.pop("response_format", None)
+                r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
+                                                "Content-Type": "application/json"},
+                                  json=payload)
+            r.raise_for_status()
+            body = r.json()
+            text = body["choices"][0]["message"]["content"] or ""
+
+    return _extract_json(text)
 
 
 # ── tier 5: regex fallback ──────────────────────────────────────────────────
@@ -315,7 +387,7 @@ async def build_draft(url: str | None, text: str | None, hint: str | None
         try:
             return await call_model(text, hint), "pasted-text", warnings
         except RuntimeError:
-            warnings.append("No ANTHROPIC_API_KEY set — used the local regex parser instead.")
+            warnings.append("No model API key set in .env — used the local regex parser instead.")
             return regex_draft(text), "regex", warnings
         except Exception as e:
             warnings.append(f"Model call failed ({type(e).__name__}); fell back to regex.")
@@ -330,7 +402,7 @@ async def build_draft(url: str | None, text: str | None, hint: str | None
             try:
                 return await call_model(tr, hint), "youtube-transcript", warnings
             except RuntimeError:
-                warnings.append("No ANTHROPIC_API_KEY set — a transcript needs the model to be useful.")
+                warnings.append("No model API key set in .env — a transcript needs the model to be useful.")
                 return regex_draft(tr), "regex", warnings
         warnings.append("yt-dlp is not installed or the video has no subtitles.")
 
@@ -347,7 +419,7 @@ async def build_draft(url: str | None, text: str | None, hint: str | None
     try:
         return await call_model(body, hint), "page-text", warnings
     except RuntimeError:
-        warnings.append("No ANTHROPIC_API_KEY set — used the local regex parser on the page text.")
+        warnings.append("No model API key set in .env — used the local regex parser on the page text.")
         return regex_draft(body), "regex", warnings
 
 
@@ -382,20 +454,36 @@ has, say so in `summary` and return an empty `changes` list."""
 
 
 async def adapt(recipe: dict[str, Any], instruction: str, pantry_names: list[str]) -> dict[str, Any]:
-    key = os.getenv("ANTHROPIC_API_KEY")
-    if not key:
+    prov = which_provider()
+    if not prov:
         raise RuntimeError("no-api-key")
-    model = os.getenv("MISE_MODEL", "claude-sonnet-4-5")
+    var, key, url, model = prov
     payload = {"recipe": recipe, "instruction": instruction, "in_pantry": pantry_names[:120]}
+    content = json.dumps(payload)[:12000]
+
     async with httpx.AsyncClient(timeout=90) as cl:
-        r = await cl.post("https://api.anthropic.com/v1/messages",
-                          headers={"x-api-key": key, "anthropic-version": "2023-06-01",
-                                   "content-type": "application/json"},
-                          json={"model": model, "max_tokens": 1500, "system": ADAPT_SYSTEM,
-                                "messages": [{"role": "user",
-                                              "content": json.dumps(payload)[:12000]}]})
-        r.raise_for_status()
-        body = r.json()
-    text = "".join(b.get("text", "") for b in body.get("content", []))
+        if var == "ANTHROPIC_API_KEY":
+            r = await cl.post(url, headers={"x-api-key": key,
+                                            "anthropic-version": "2023-06-01",
+                                            "content-type": "application/json"},
+                              json={"model": model, "max_tokens": 1500,
+                                    "system": ADAPT_SYSTEM,
+                                    "messages": [{"role": "user", "content": content}]})
+            r.raise_for_status()
+            text = "".join(b.get("text", "") for b in r.json().get("content", []))
+        else:
+            body = {"model": model, "max_tokens": 1500,
+                    "messages": [{"role": "system", "content": ADAPT_SYSTEM},
+                                 {"role": "user", "content": content}],
+                    "response_format": {"type": "json_object"}}
+            r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
+                                            "Content-Type": "application/json"}, json=body)
+            if r.status_code == 400:
+                body.pop("response_format", None)
+                r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
+                                                "Content-Type": "application/json"}, json=body)
+            r.raise_for_status()
+            text = r.json()["choices"][0]["message"]["content"] or ""
+
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     return json.loads(text[text.find("{"):text.rfind("}") + 1])

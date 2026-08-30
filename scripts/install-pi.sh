@@ -21,12 +21,18 @@ python3 -m venv .venv
 # yt-dlp is optional; only needed for YouTube recipe import
 ./.venv/bin/pip install -q yt-dlp || echo "   (yt-dlp skipped — YouTube import will be unavailable)"
 
-# Hardware libraries: Pi only, and only once the load cell is wired.
-if grep -qi "raspberry pi" /proc/device-tree/model 2>/dev/null; then
-  echo "==> Raspberry Pi detected — installing GPIO libraries"
-  ./.venv/bin/pip install -q "hx711" "RPi.GPIO" || \
-    echo "   (HX711 install failed — the scale stays simulated until this works)"
-fi
+# Hardware libraries: deliberately NOT installed here.
+#
+# RPi.GPIO does not work on a Raspberry Pi 5 — the Pi 5 moved GPIO behind the
+# RP1 southbridge and RPi.GPIO's SOC base-address probe raises RuntimeError at
+# import-time-adjacent setup. Installing it on a Pi 5 turns a working simulated
+# scale into a crashed server.
+#
+# Install the GPIO stack by hand, once the load cell is physically wired:
+#     ./.venv/bin/pip install hx711 rpi-lgpio      # Pi 5 (rpi-lgpio, NOT RPi.GPIO)
+#     ./.venv/bin/pip install hx711 RPi.GPIO       # Pi 4 and older
+# rpi-lgpio is a drop-in: it installs itself under the name RPi.GPIO, so
+# server/scale.py needs no change.
 
 mkdir -p data
 [ -f .env ] || { cp .env.example .env; echo "==> Created .env — put your API key in it"; }
