@@ -25,7 +25,8 @@ from typing import Any
 
 import httpx
 
-from .models import DraftIngredient, DraftStage, RecipeDraft
+from .models import (ChatResponse, DraftIngredient, DraftStage, Proposal,
+                     RecipeDraft, RecipeDraftSet)
 
 UA = "Mozilla/5.0 (compatible; MiseKitchen/1.0; +local)"
 TIMEOUT = 20.0
@@ -85,22 +86,28 @@ def match_pantry(name: str, pantry: dict[str, dict[str, Any]]) -> tuple[str | No
 
 
 # ── tier 1: JSON-LD ─────────────────────────────────────────────────────────
-def _walk_for_recipe(node: Any) -> dict | None:
+def _walk_all_recipes(node: Any, seen: list[int] | None = None) -> list[dict]:
+    """Every schema.org Recipe on the page, in document order.
+
+    Round-up and listicle pages ("12 weeknight pastas") embed one Recipe block
+    per dish. Taking only the first is how you silently import the wrong one.
+    """
+    seen = [] if seen is None else seen
+    out: list[dict] = []
     if isinstance(node, dict):
         t = node.get("@type")
         types = t if isinstance(t, list) else [t]
         if any(str(x).lower() == "recipe" for x in types if x):
-            return node
+            if id(node) not in seen:
+                seen.append(id(node))
+                out.append(node)
+            return out
         for v in node.values():
-            found = _walk_for_recipe(v)
-            if found:
-                return found
+            out += _walk_all_recipes(v, seen)
     elif isinstance(node, list):
         for v in node:
-            found = _walk_for_recipe(v)
-            if found:
-                return found
-    return None
+            out += _walk_all_recipes(v, seen)
+    return out
 
 
 ISO_DUR = re.compile(r"PT(?:(\d+)H)?(?:(\d+)M)?")
@@ -136,44 +143,43 @@ def _parse_ing_line(line: str) -> DraftIngredient | None:
                            amt=amt, unit=(m.group(2) or "ea").lower())
 
 
-def from_json_ld(html: str) -> RecipeDraft | None:
+def _all_json_ld(html: str) -> list[RecipeDraft]:
     blocks = re.findall(r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
                         html, re.S | re.I)
+    out: list[RecipeDraft] = []
     for b in blocks:
         try:
             data = json.loads(b.strip())
         except Exception:
             continue
-        node = _walk_for_recipe(data)
-        if not node:
-            continue
-        ings: list[DraftIngredient] = []
-        for line in node.get("recipeIngredient", []) or []:
-            parsed = _parse_ing_line(str(line))
-            ings.append(parsed or DraftIngredient(raw=str(line), name=str(line), amt=1, unit="ea"))
-        instr = node.get("recipeInstructions", []) or []
-        steps = []
-        if isinstance(instr, str):
-            steps = [{"t": s.strip(), "mins": 5} for s in re.split(r"(?<=[.!?])\s+", instr) if len(s.strip()) > 8]
-        else:
-            for s in instr:
-                txt = s.get("text") if isinstance(s, dict) else str(s)
-                if txt and len(txt.strip()) > 4:
-                    steps.append({"t": txt.strip()[:400], "mins": 5})
-        if not ings:
-            continue
-        mins = _iso_minutes(node.get("totalTime")) or \
-            (_iso_minutes(node.get("prepTime")) + _iso_minutes(node.get("cookTime"))) or 30
-        name = node.get("name") or "Imported recipe"
-        return RecipeDraft(
-            name=str(name)[:120], mins=mins or 30,
-            basis_name=ings[0].name if ings else None,
-            stages=[DraftStage(name="Everything", medium="Stove top", vessel="Saucepan",
-                               ing=ings, steps=[{"t": s["t"], "mins": s["mins"]} for s in steps] or
-                               [{"t": "Cook it.", "mins": 10}])],
-            notes="Parsed from the page's own structured data — no model involved.",
-            confidence="high")
-    return None
+        for node in _walk_all_recipes(data):
+            ings: list[DraftIngredient] = []
+            for line in node.get("recipeIngredient", []) or []:
+                parsed = _parse_ing_line(str(line))
+                ings.append(parsed or DraftIngredient(raw=str(line), name=str(line), amt=1, unit="ea"))
+            instr = node.get("recipeInstructions", []) or []
+            steps = []
+            if isinstance(instr, str):
+                steps = [{"t": s.strip(), "mins": 5} for s in re.split(r"(?<=[.!?])\s+", instr) if len(s.strip()) > 8]
+            else:
+                for s in instr:
+                    txt = s.get("text") if isinstance(s, dict) else str(s)
+                    if txt and len(txt.strip()) > 4:
+                        steps.append({"t": txt.strip()[:400], "mins": 5})
+            if not ings:
+                continue
+            mins = _iso_minutes(node.get("totalTime")) or \
+                (_iso_minutes(node.get("prepTime")) + _iso_minutes(node.get("cookTime"))) or 30
+            name = node.get("name") or "Imported recipe"
+            out.append(RecipeDraft(
+                name=str(name)[:120], mins=mins or 30,
+                basis_name=ings[0].name if ings else None,
+                stages=[DraftStage(name="Everything", medium="Stove top", vessel="Saucepan",
+                                   ing=ings, steps=[{"t": s["t"], "mins": s["mins"]} for s in steps] or
+                                   [{"t": "Cook it.", "mins": 10}])],
+                notes="Parsed from the page's own structured data — no model involved.",
+                confidence="high"))
+    return out
 
 
 # ── tier 2: YouTube transcript ──────────────────────────────────────────────
@@ -251,11 +257,21 @@ Rules you must not break:
   is the flour. For a braise it is the meat. For pasta it is the pasta.
 - Set confidence honestly. "low" if the source was vague or you had to guess.
 
+Return {"recipes": [ ... ]} — a LIST. Almost always exactly one recipe. Return
+several ONLY when the source plainly contains several distinct dishes (a
+round-up post, a video covering three meals). Component sub-recipes of one dish
+— a sauce, a dough, a garnish — are STAGES of that one recipe, not separate
+recipes.
+
 Return ONLY the JSON object, no prose, no code fence."""
 
 
 def _schema_hint() -> str:
     return json.dumps(RecipeDraft.model_json_schema(), separators=(",", ":"))[:3500]
+
+
+def _proposal_hint() -> str:
+    return json.dumps(Proposal.model_json_schema(), separators=(",", ":"))[:3000]
 
 
 # ── which model provider, and where it lives ────────────────────────────────
@@ -302,20 +318,28 @@ def _build_prompt(source_text: str, hint: str | None) -> str:
     return user
 
 
-def _extract_json(text: str) -> RecipeDraft:
+def _raw_json(text: str) -> str:
+    text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < 0:
+        raise ValueError("model returned no JSON object")
+    return text[start:end + 1]
+
+
+def _extract_drafts(text: str) -> list[RecipeDraft]:
     """Whatever the model wrapped its answer in, find the object and validate it.
 
     Validation is the whole point: a model that invents a negative quantity or
     drops a required field fails here, before anything reaches the UI.
     """
-    text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end < 0:
-        raise ValueError("model returned no JSON object")
-    return RecipeDraft.model_validate_json(text[start:end + 1])
+    blob = _raw_json(text)
+    try:
+        return RecipeDraftSet.model_validate_json(blob).recipes
+    except Exception:
+        return [RecipeDraft.model_validate_json(blob)]      # it ignored the wrapper
 
 
-async def call_model(source_text: str, hint: str | None = None) -> RecipeDraft:
+async def call_model(source_text: str, hint: str | None = None) -> list[RecipeDraft]:
     prov = which_provider()
     if not prov:
         raise RuntimeError("no-api-key")
@@ -345,7 +369,7 @@ async def call_model(source_text: str, hint: str | None = None) -> RecipeDraft:
                               json=payload)
             if r.status_code == 400:
                 # not every provider supports forced JSON mode. the prompt already
-                # asks for bare JSON, and _extract_json copes either way.
+                # asks for bare JSON, and _extract_drafts copes either way.
                 payload.pop("response_format", None)
                 r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
                                                 "Content-Type": "application/json"},
@@ -354,7 +378,7 @@ async def call_model(source_text: str, hint: str | None = None) -> RecipeDraft:
             body = r.json()
             text = body["choices"][0]["message"]["content"] or ""
 
-    return _extract_json(text)
+    return _extract_drafts(text)
 
 
 # ── tier 5: regex fallback ──────────────────────────────────────────────────
@@ -380,18 +404,26 @@ def regex_draft(text: str) -> RecipeDraft:
 
 
 # ── orchestrator ────────────────────────────────────────────────────────────
-async def build_draft(url: str | None, text: str | None, hint: str | None
-                      ) -> tuple[RecipeDraft, str, list[str]]:
+async def build_drafts(url: str | None, text: str | None, hint: str | None
+                       ) -> tuple[list[RecipeDraft], str, list[str]]:
+    """Walk the tiers until something works. Returns every recipe it found."""
     warnings: list[str] = []
-    if text and text.strip():
+
+    async def model_or_regex(src: str, prov: str, why_regex: str
+                             ) -> tuple[list[RecipeDraft], str, list[str]]:
         try:
-            return await call_model(text, hint), "pasted-text", warnings
+            return await call_model(src, hint), prov, warnings
         except RuntimeError:
-            warnings.append("No model API key set in .env — used the local regex parser instead.")
-            return regex_draft(text), "regex", warnings
+            warnings.append(why_regex)
+            return [regex_draft(src)], "regex", warnings
         except Exception as e:
-            warnings.append(f"Model call failed ({type(e).__name__}); fell back to regex.")
-            return regex_draft(text), "regex", warnings
+            warnings.append(f"Model call failed ({type(e).__name__}); fell back to the regex parser.")
+            return [regex_draft(src)], "regex", warnings
+
+    if text and text.strip():
+        return await model_or_regex(
+            text, "pasted-text",
+            "No model API key set in .env — used the local regex parser instead.")
 
     if not url:
         raise ValueError("give me a url or some text")
@@ -399,28 +431,50 @@ async def build_draft(url: str | None, text: str | None, hint: str | None
     if re.search(r"(youtube\.com|youtu\.be)", url, re.I):
         tr = youtube_transcript(url)
         if tr:
-            try:
-                return await call_model(tr, hint), "youtube-transcript", warnings
-            except RuntimeError:
-                warnings.append("No model API key set in .env — a transcript needs the model to be useful.")
-                return regex_draft(tr), "regex", warnings
-        warnings.append("yt-dlp is not installed or the video has no subtitles.")
+            return await model_or_regex(
+                tr, "youtube-transcript",
+                "No model API key set in .env — a transcript needs the model to be useful.")
+        warnings.append("yt-dlp is not installed, or that video has no subtitles.")
+
+    walled = re.search(r"(instagram\.com|pinterest\.|facebook\.com|tiktok\.com)", url, re.I)
+    if walled:
+        # These refuse anonymous server fetches and there is no clever way
+        # around it that doesn't mean parking your login on the Pi. yt-dlp
+        # sometimes gets a public reel, so it's still worth one attempt.
+        tr = youtube_transcript(url)
+        if tr:
+            return await model_or_regex(
+                tr, "youtube-transcript",
+                "No model API key set in .env — a transcript needs the model to be useful.")
 
     html, w = await fetch(url)
     warnings += w
     if not html:
+        if walled:
+            site = walled.group(1).rstrip(".").split(".")[0].title()
+            raise ValueError(
+                f"{site} won't let a server read that post — it blocks anything "
+                "that isn't a logged-in browser. Open the post, copy the caption, "
+                "and paste it into the box below. That works every time.")
         raise ValueError("; ".join(warnings) or "could not fetch that page")
 
-    ld = from_json_ld(html)
+    ld = _all_json_ld(html)
     if ld:
+        if len(ld) > 1:
+            warnings.append(f"That page has {len(ld)} recipes on it.")
         return ld, "json-ld", warnings
 
     body = strip_html(html)
-    try:
-        return await call_model(body, hint), "page-text", warnings
-    except RuntimeError:
-        warnings.append("No model API key set in .env — used the local regex parser on the page text.")
-        return regex_draft(body), "regex", warnings
+    return await model_or_regex(
+        body, "page-text",
+        "No model API key set in .env — used the local regex parser on the page text.")
+
+
+async def build_draft(url: str | None, text: str | None, hint: str | None
+                      ) -> tuple[RecipeDraft, str, list[str]]:
+    """Back-compat single-draft wrapper."""
+    drafts, prov, warns = await build_drafts(url, text, hint)
+    return drafts[0], prov, warns
 
 
 def resolve(draft: RecipeDraft, pantry: dict[str, dict[str, Any]]
@@ -487,3 +541,130 @@ async def adapt(recipe: dict[str, Any], instruction: str, pantry_names: list[str
 
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     return json.loads(text[text.find("{"):text.rfind("}") + 1])
+
+
+# ── the assistant: it proposes, you approve, Python applies ─────────────────
+#
+# This is the same principle as the import path, extended to actions. The model
+# is handed a read-only snapshot and returns a `Proposal`. It has no write
+# endpoint, no database handle, and no way to reach one. Applying a proposal is
+# the browser replaying it through the ordinary endpoints — the same ones your
+# own clicks use — so there is exactly one write path in the system and it is
+# the audited one.
+#
+# The practical consequence: the worst a confused model can do is waste your
+# time. It cannot silently change a quantity you did not look at.
+CHAT_SYSTEM = """You are the assistant inside Mise, a kitchen system. You help the
+cook fix recipe drafts, correct their pantry, and build a shopping list.
+
+YOU CANNOT CHANGE ANYTHING DIRECTLY. You return a PROPOSAL. The cook reads it as
+a diff and clicks apply or discard. So:
+- Propose the smallest change that does the job. Never restate things you are
+  not changing.
+- Every operation carries a short `why`. If you cannot justify it from what the
+  cook said or from the data you were given, do not propose it.
+- If you are missing something you need — which of two pantry rows they meant,
+  what size their tin is — put it in `questions` and propose nothing. Asking is
+  cheaper than a wrong guess they have to spot.
+- Never invent quantities. If the cook says "I bought more flour", ask how much.
+- `reply` is one or two sentences of plain speech. The diff shows the detail;
+  do not narrate it line by line.
+
+Scope rules:
+- draft  — you may return a full revised `draft`. Keep every field you were not
+           asked to change byte-identical. Amounts stay in the units given.
+- pantry — use `pantry` ops. `id` must be a real id from the snapshot. Use
+           `add` only for something genuinely not there.
+- shop   — use `shop` ops. Names only, plus a quantity if the cook gave one.
+
+Return ONLY the JSON object, no prose, no code fence."""
+
+
+def _pantry_snapshot(pantry: dict[str, dict[str, Any]], limit: int = 140) -> list[dict]:
+    """What the model is allowed to see. Ids, names, quantities — nothing else."""
+    rows = []
+    for pid, it in list(pantry.items())[:limit]:
+        rows.append({"id": pid, "name": it.get("name"), "qty": it.get("qty"),
+                     "unit": it.get("unit"), "expires": it.get("expires")})
+    return rows
+
+
+async def chat(message: str, scope: str, draft: dict[str, Any] | None,
+               history: list[dict[str, str]], pantry: dict[str, dict[str, Any]]
+               ) -> ChatResponse:
+    prov = which_provider()
+    if not prov:
+        raise RuntimeError("no-api-key")
+    var, key, url, model = prov
+
+    context: dict[str, Any] = {"scope": scope, "pantry": _pantry_snapshot(pantry)}
+    if draft:
+        context["draft"] = draft
+    user = (f"Context (read-only):\n{json.dumps(context)[:11000]}\n\n"
+            f"The cook says: {message}\n\n"
+            f"Match this JSON schema exactly:\n{_proposal_hint()}\n\n"
+            f"When you return a `draft`, it must match:\n{_schema_hint()}")
+
+    msgs = [{"role": h.get("role", "user")[:9], "content": str(h.get("content", ""))[:2000]}
+            for h in history[-6:]]
+    msgs.append({"role": "user", "content": user})
+
+    async with httpx.AsyncClient(timeout=90) as cl:
+        if var == "ANTHROPIC_API_KEY":
+            r = await cl.post(url, headers={"x-api-key": key,
+                                            "anthropic-version": "2023-06-01",
+                                            "content-type": "application/json"},
+                              json={"model": model, "max_tokens": 3000,
+                                    "system": CHAT_SYSTEM, "messages": msgs})
+            r.raise_for_status()
+            text = "".join(b.get("text", "") for b in r.json().get("content", []))
+        else:
+            body = {"model": model, "max_tokens": 3000,
+                    "messages": [{"role": "system", "content": CHAT_SYSTEM}] + msgs,
+                    "response_format": {"type": "json_object"}}
+            r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
+                                            "Content-Type": "application/json"}, json=body)
+            if r.status_code == 400:
+                body.pop("response_format", None)
+                r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
+                                                "Content-Type": "application/json"}, json=body)
+            r.raise_for_status()
+            text = r.json()["choices"][0]["message"]["content"] or ""
+
+    try:
+        data = json.loads(_raw_json(text))
+    except Exception:
+        # It answered in prose instead of JSON. That's a miss, not a crash —
+        # show the cook what it said and propose nothing.
+        return ChatResponse(reply=(text.strip()[:600] or "It didn't answer.") +
+                            "\n\n(That wasn't a change I could act on — nothing proposed.)")
+    reply = str(data.pop("reply", "") or data.get("summary", "") or "Here's what I'd change.")
+
+    # The gate. A proposal that doesn't fit the schema is discarded entirely
+    # rather than half-applied — you get the sentence, not a broken change-set.
+    proposal: Proposal | None = None
+    try:
+        proposal = Proposal.model_validate(data)
+    except Exception as e:
+        return ChatResponse(reply=f"{reply}\n\n(I couldn't put that into a valid change — "
+                                  f"{type(e).__name__}. Nothing was proposed.)")
+
+    if proposal.is_empty() and not proposal.questions:
+        return ChatResponse(reply=reply)
+
+    matched, unmatched = [], []
+    if proposal.draft:
+        matched, unmatched = resolve(proposal.draft, pantry)
+
+    # Drop pantry ops pointing at rows that don't exist. A hallucinated id is
+    # the single most likely failure here, and it should never reach the diff.
+    kept = []
+    for op in proposal.pantry:
+        if op.op == "add" or (op.id and op.id in pantry):
+            kept.append(op)
+    dropped = len(proposal.pantry) - len(kept)
+    proposal.pantry = kept
+    if dropped:
+        reply += f" (Dropped {dropped} change{'s' if dropped > 1 else ''} aimed at pantry rows that don't exist.)"
+
+    return ChatResponse(reply=reply, proposal=proposal, matched=matched, unmatched=unmatched)

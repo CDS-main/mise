@@ -111,18 +111,96 @@ class RecipeDraft(BaseModel):
     confidence: Literal["high", "medium", "low"] = "medium"
 
 
+class RecipeDraftSet(BaseModel):
+    """What the model returns. A page can hold more than one recipe."""
+    recipes: list[RecipeDraft] = Field(min_length=1)
+
+
 class ImportRequest(BaseModel):
     url: str | None = None
     text: str | None = None
     hint: str | None = None                   # "it's a 2-pan recipe", etc.
+    choose: int | None = None                 # which candidate, once you've picked
+
+
+PROVENANCE = Literal["json-ld", "youtube-transcript", "page-text", "pasted-text", "regex"]
+
+
+class Candidate(BaseModel):
+    index: int
+    name: str
+    ingredients: int
+    mins: int
 
 
 class ImportResponse(BaseModel):
-    draft: RecipeDraft
-    provenance: Literal["json-ld", "youtube-transcript", "page-text", "pasted-text", "regex"]
-    matched: list[dict[str, Any]]             # per-ingredient pantry match + score
-    unmatched: list[str]
+    """Either a draft, or — when the source held several recipes — a choice.
+
+    `draft` is None exactly when `candidates` has more than one entry and you
+    haven't told us which you meant. Send the same request back with `choose`.
+    """
+    draft: RecipeDraft | None = None
+    candidates: list[Candidate] = []
+    provenance: PROVENANCE
+    matched: list[dict[str, Any]] = []        # per-ingredient pantry match + score
+    unmatched: list[str] = []
     warnings: list[str] = []
+
+
+# ── the assistant proposes; you approve; Python applies ─────────────────────
+# No model output is ever written anywhere. It returns a Proposal, the browser
+# renders it as a diff, and only your click turns it into real writes through
+# the same endpoints you'd use by hand. This schema is the enforcement point:
+# anything that doesn't fit is rejected before you ever see it.
+class PantryOp(BaseModel):
+    op: Literal["add", "set_qty", "adjust", "set_field", "remove"]
+    id: str | None = None                     # existing pantry row
+    name: str | None = None                   # for `add`, or to identify a row
+    qty: float | None = None
+    unit: str | None = None
+    field: str | None = None                  # for set_field: shelf, expires, bought…
+    value: Any = None
+    why: str = ""
+
+    @field_validator("field")
+    @classmethod
+    def _safe_field(cls, v: str | None) -> str | None:
+        allowed = {"shelf", "expires", "bought", "unit", "cls", "name", "tare", "note"}
+        if v is not None and v not in allowed:
+            raise ValueError(f"field must be one of {sorted(allowed)}")
+        return v
+
+
+class ShopOp(BaseModel):
+    name: str
+    qty: float | None = None
+    unit: str | None = None
+    why: str = ""
+
+
+class Proposal(BaseModel):
+    summary: str
+    pantry: list[PantryOp] = []
+    shop: list[ShopOp] = []
+    draft: RecipeDraft | None = None          # a fully revised draft, to diff
+    questions: list[str] = []                 # it needs something from you
+
+    def is_empty(self) -> bool:
+        return not (self.pantry or self.shop or self.draft)
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    scope: Literal["draft", "pantry", "shop"] = "draft"
+    draft: dict[str, Any] | None = None       # the draft under review, if any
+    history: list[dict[str, str]] = []        # [{role, content}], last few turns
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    proposal: Proposal | None = None
+    matched: list[dict[str, Any]] = []        # if the proposal revised a draft
+    unmatched: list[str] = []
 
 
 class AdaptRequest(BaseModel):

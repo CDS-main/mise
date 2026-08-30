@@ -112,6 +112,28 @@ quantity fails the schema before it reaches the UI.
 That separation is the point. Everything reproducible stays in code, where it
 can be tested; the model handles only the genuinely fuzzy part.
 
+### The assistant proposes; you approve; Python applies
+
+`POST /api/assist/chat` is the only conversational endpoint, and it **cannot
+write**. It reads a snapshot of the pantry and returns a `Proposal` — a typed
+change-set. The browser renders that as a diff. Only your click turns it into
+real writes, and those replay through the ordinary endpoints (`PATCH
+/api/pantry/{id}`, `PUT /api/state`) that your own clicks use.
+
+So there is one write path in this system, not two, and it is the audited one.
+
+Four things happen to a proposal before you ever see it:
+
+| Guard | What it stops |
+|---|---|
+| `Proposal` schema validation | a malformed change-set is discarded whole, never half-applied |
+| `PantryOp.field` allow-list | it can set `expires` or `shelf`; it cannot set `qty` through the back door |
+| id existence check | hallucinated pantry ids are dropped and the drop is reported |
+| non-JSON reply | shown to you as text, proposing nothing |
+
+The worst a confused model can do here is waste your time. It cannot quietly
+change a number you never looked at. Verified: `tests/` exercises all four.
+
 ### Import tiers
 
 Cheapest and most reliable first:
@@ -128,9 +150,13 @@ Most real recipe sites publish JSON-LD, so tier 1 handles them perfectly for
 free. Tier 5 means the import form still works with no API key configured — it
 just tells you honestly that it's guessing.
 
-**Instagram and Pinterest will block a server fetch.** There is no clever way
-around it. The working path is the PWA share target: share the post from your
-phone, Mise opens with the caption prefilled, and the assistant works from that.
+**Instagram, Pinterest, Facebook and TikTok block server fetches.** There is no
+clever way around it that doesn't mean parking your login on the Pi. Mise tries
+yt-dlp once (it sometimes gets a public reel), then tells you plainly to paste
+the caption. That path works every time and costs about ten seconds.
+
+Pages holding several recipes — round-ups, "12 weeknight pastas" — return a
+candidate list instead of silently importing the first one.
 
 ---
 

@@ -19,7 +19,8 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import assistant, db
-from .models import AdaptRequest, ImportRequest, ImportResponse, QtyAdjust, StatePut
+from .models import (AdaptRequest, Candidate, ChatRequest, ChatResponse,
+                     ImportRequest, ImportResponse, QtyAdjust, StatePut)
 from .scale import SCALE
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -186,19 +187,60 @@ def del_recipe(rid: str) -> dict[str, Any]:
 # ── assistant ───────────────────────────────────────────────────────────────
 @app.post("/api/import", response_model=ImportResponse)
 async def import_recipe(body: ImportRequest) -> ImportResponse:
+    """URL or text in, reviewed draft out.
+
+    When the source holds several recipes and you haven't said which, this
+    returns the candidate list and no draft. Send the same request back with
+    `choose` set to the index you want.
+    """
     if not body.url and not body.text:
         raise HTTPException(422, "give me a url or some text")
     try:
-        draft, provenance, warnings = await assistant.build_draft(body.url, body.text, body.hint)
+        drafts, provenance, warnings = await assistant.build_drafts(body.url, body.text, body.hint)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    if not drafts:
+        raise HTTPException(422, "nothing recipe-shaped in there")
+
+    cands = [Candidate(index=i, name=d.name or f"Recipe {i + 1}",
+                       ingredients=sum(len(s.ing) for s in d.stages), mins=d.mins)
+             for i, d in enumerate(drafts)]
+
+    if len(drafts) > 1 and body.choose is None:
+        return ImportResponse(draft=None, candidates=cands, provenance=provenance,
+                              warnings=warnings)
+
+    pick = body.choose if body.choose is not None else 0
+    if not 0 <= pick < len(drafts):
+        raise HTTPException(422, f"choose must be 0..{len(drafts) - 1}")
+    draft = drafts[pick]
+
     pantry = db.get_state()["pantry"]
     matched, unmatched = assistant.resolve(draft, pantry)
     if unmatched:
         warnings.append(f"{len(unmatched)} ingredient(s) didn't match anything you own — "
                         "map them by hand or they'll be dropped.")
-    return ImportResponse(draft=draft, provenance=provenance, matched=matched,
-                          unmatched=unmatched, warnings=warnings)
+    return ImportResponse(draft=draft, candidates=cands, provenance=provenance,
+                          matched=matched, unmatched=unmatched, warnings=warnings)
+
+
+@app.post("/api/assist/chat", response_model=ChatResponse)
+async def assist_chat(body: ChatRequest) -> ChatResponse:
+    """Ask for a change. Get back a proposal — never a write.
+
+    This endpoint reads the pantry and returns a validated change-set. It does
+    not touch the database. Applying is the client replaying the proposal
+    through the ordinary write endpoints, which is what keeps one audited write
+    path in the system instead of two.
+    """
+    pantry = db.get_state()["pantry"]
+    try:
+        return await assistant.chat(body.message, body.scope, body.draft,
+                                    body.history, pantry)
+    except RuntimeError:
+        raise HTTPException(503, "No model API key configured on the server — set one in .env.")
+    except Exception as e:
+        raise HTTPException(502, f"model call failed: {type(e).__name__}")
 
 
 @app.post("/api/assist/adapt")

@@ -68,6 +68,9 @@ main{padding:22px 18px 100px;flex:1}
 .eyebrow{font-family:"JetBrains Mono",monospace;font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-3)}
 .sub{color:var(--fg-2);font-size:.92rem}
 .note{font-size:.79rem;color:var(--fg-3)}
+.warn-t{color:var(--amber);font-weight:500}
+#assist .why{white-space:pre-wrap}
+#assist input{font-size:.86rem}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh)}
 .pad{padding:17px}
 .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
@@ -469,14 +472,14 @@ function fresh(){
   SEED.forEach(([id,name,nl,cat,tag,cls,q,unit,int,bought,shelf,low,sub,price,pack])=>{
     p[id]={id,name,nl,cat,tag,cls,qty:q,unit,integer:!!int,
       bought:q>0?iso(d(bought)):null,expires:q>0?iso(d(bought+shelf)):null,shelf,low,sub,price,pack}});
-  return {pantry:p,log:[],custom:[],appliances:APPLIANCES.map(a=>({...a})),kit:{...DEFAULT_KIT},
+  return {pantry:p,log:[],custom:[],hidden:[],extras:[],appliances:APPLIANCES.map(a=>({...a})),kit:{...DEFAULT_KIT},
     reels:{cuisine:"Any",meal:"Any",taste:"Any",theme:"Any"},themeOther:"",
     pins:{cuisine:false,meal:false,taste:false,theme:false},
     effort:"Any",medium:"Any",mode:"auto",intakeMode:"manual",basket:[],intake:[],demo:true};
 }
 function load(){return (window.MiseAPI&&MiseAPI.cachedState())||null}
 function save(){if(window.MiseAPI)MiseAPI.queueSave(S);else try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
-const RECIPES=()=>[...BUILTIN,...(S.custom||[])];
+const RECIPES=()=>[...BUILTIN.filter(r=>!(S.hidden||[]).includes(r.id)),...(S.custom||[])];
 const P=id=>S.pantry[id], nm=id=>P(id)?.name||id, nlOf=id=>P(id)?.nl||"";
 const un=id=>P(id)?.unit||"g", qty=id=>P(id)?.qty||0, isInt=id=>!!P(id)?.integer;
 const allIng=r=>r.stages.flatMap(s=>s.ing);
@@ -977,6 +980,9 @@ function renderSummary(){
 
 /* ══ RECIPE BOOK + IMPORT ══ */
 let DRAFT=null;
+const newDraft=()=>({url:"",text:"",hint:"",parsed:null,candidates:[],
+  warnings:[],provenance:"",error:"",loading:false,chat:[],proposal:null,busy:false,
+  editing:null,hideBuiltin:null,source:""});
 function renderBook(){
   if(DRAFT)return renderDraft();
   const list=RECIPES().map(r=>{
@@ -1000,10 +1006,37 @@ function renderBook(){
          <span class="tag b">${x.r.stages.length} stages</span>${x.r.source?`<span class="tag a">imported</span>`:""}
          <span class="tag ${x.a.missing.length?"":"g"}">${Math.round(x.a.cov*100)}% in stock</span></div>
        <p class="why">${x.mae!=null?`avg error ${x.mae.toFixed(2)}% · avg ${fmtT(x.tm)}`:"never cooked"}${x.note?` · “${esc(x.note)}”`:""}</p>
+       <button class="btn ghost sm" data-edit="${x.r.id}" style="align-self:flex-start">Edit</button>
      </div></div>`).join("")}</div>`;
-  $("#imp").onclick=()=>{DRAFT={url:"",text:"",parsed:null};renderBook()};
+  $("#imp").onclick=()=>{DRAFT=newDraft();renderBook()};
+  $$("[data-edit]").forEach(b=>b.onclick=e=>{e.stopPropagation();editRecipe(b.dataset.edit)});
   $$("[data-open]").forEach(b=>b.onclick=()=>openBrief(b.dataset.open));
 }
+/* ══ IMPORT ═══════════════════════════════════════════════════════════════
+ * The link box used to be decorative — it stored what you typed and nothing
+ * else. It now posts to /api/import, which walks five tiers: the page's own
+ * structured data, a YouTube transcript, the stripped page text, your pasted
+ * text, and finally a local regex parser. Tier 1 costs nothing and is exact.
+ *
+ * Everything the server hands back is a DRAFT. Nothing reaches the recipe book
+ * until you press save on the review form.
+ * ════════════════════════════════════════════════════════════════════════ */
+const serverUp = () => !!(window.MiseAPI && MiseAPI.isOnline());
+
+async function post(path, body){
+  const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"},
+                               body:JSON.stringify(body)});
+  const txt = await r.text();
+  let j = null; try{ j = JSON.parse(txt) }catch(_){}
+  if(!r.ok){
+    const e = new Error((j && (j.detail || j.error)) || txt || ("HTTP "+r.status));
+    e.status = r.status; throw e;
+  }
+  return j;
+}
+
+/* Local fallback parser. Only used when the server is unreachable — on a
+ * laptop with the Pi switched off, the app still does something useful. */
 function parseText(txt){
   const lines=txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
   const ing=[],steps=[];
@@ -1015,86 +1048,409 @@ function parseText(txt){
       if(u==="kg"||u==="l")amt*=1000;
       if(u==="tbsp")amt*=15;if(u==="tsp")amt*=5;if(u.startsWith("cup"))amt*=240;
       const name=m[3].replace(/^of\s+/i,"").trim();
-      const first=name.toLowerCase().split(/\s+/)[0];
-      const guess=Object.values(S.pantry).find(p=>{
-        const pf=p.name.toLowerCase().split(/\s+/);
-        return pf.includes(first)||name.toLowerCase().includes(pf[pf.length-1])});
-      ing.push({raw:l,amt:Math.round(amt),name,id:guess?guess.id:""});
+      ing.push({raw:l,amt:Math.round(amt),unit:"g",name,id:guessPantry(name)});
     } else if(l.length>25) steps.push(l);
   });
   return {ing,steps};
 }
-function renderDraft(){
+function guessPantry(name){
+  const first=name.toLowerCase().split(/\s+/)[0];
+  const g=Object.values(S.pantry).find(p=>{
+    const pf=p.name.toLowerCase().split(/\s+/);
+    return pf.includes(first)||name.toLowerCase().includes(pf[pf.length-1])});
+  return g?g.id:"";
+}
+
+/* Server draft -> the shape the review form edits. Stages are preserved:
+ * the server can return a real parallel structure and flattening it here
+ * would throw away the most useful thing it produced. */
+function draftFromServer(res){
+  const d=res.draft, m=res.matched||[]; let k=0;
+  return {
+    name:d.name||"", cuisine:d.cuisine||"Other", meal:d.meal||"Dinner",
+    taste:d.taste||"Savoury", mins:d.mins||30, servings:d.servings||null,
+    notes:d.notes||"", confidence:d.confidence||"medium",
+    basis:"", stages:(d.stages||[]).map(st=>({
+      name:st.name||"Everything", medium:st.medium||"Stove top",
+      vessel:st.vessel||"Saucepan", needs:st.needs||[],
+      ing:(st.ing||[]).map(g=>{ const mm=m[k++]||{};
+        return {raw:g.raw||g.name, name:g.name, amt:Math.round((mm.amt!=null?mm.amt:g.amt)*10)/10,
+                unit:mm.unit||g.unit||"g", id:mm.id||"", station:g.station||"prep",
+                score:mm.score||0}; }),
+      steps:(st.steps||[]).map(x=>typeof x==="string"?x:x.t)
+    }))
+  };
+}
+function flatIng(p){ return p.stages.flatMap(st=>st.ing) }
+
+async function runImport(choose){
   const D=DRAFT;
+  D.loading=true; D.error=""; renderBook();
+  try{
+    const body={hint:D.hint||null};
+    if(D.text&&D.text.trim()) body.text=D.text; else body.url=D.url;
+    if(choose!=null) body.choose=choose;
+    const res=await post("/api/import", body);
+    D.provenance=res.provenance; D.warnings=res.warnings||[];
+    if(!res.draft && (res.candidates||[]).length>1){
+      D.candidates=res.candidates; D.parsed=null;      // ask which one
+    } else {
+      D.candidates=[]; D.parsed=draftFromServer(res);
+      const f=flatIng(D.parsed); D.parsed.basis=(f.find(g=>g.id)||{}).id||"";
+    }
+  }catch(err){
+    D.error=String(err.message||err);
+    if(D.text&&D.text.trim()){                          // offline: parse locally
+      const q=parseText(D.text);
+      if(q.ing.length){
+        D.provenance="browser-regex";
+        D.parsed={name:"",cuisine:"Other",meal:"Dinner",taste:"Savoury",mins:30,notes:"",
+          confidence:"low",basis:(q.ing.find(g=>g.id)||{}).id||"",
+          stages:[{name:"Everything",medium:"Stove top",vessel:"Saucepan",needs:[],
+                   ing:q.ing,steps:q.steps}]};
+        D.error+=" — parsed it here in the browser instead.";
+      }
+    }
+  }
+  D.loading=false; renderBook();
+}
+
+const TIER={"json-ld":"the page's own structured data — no model involved",
+  "youtube-transcript":"the video's subtitles, read by the model",
+  "page-text":"the page text, read by the model",
+  "pasted-text":"your pasted text, read by the model",
+  "regex":"the local parser — no model key configured",
+  "browser-regex":"the browser's own parser — the server was unreachable"};
+
+function renderDraft(){
+  const D=DRAFT, editing=!!D.editing;
   $("#v-book").innerHTML=`
-   <div class="between"><div class="col-sm"><span class="eyebrow">Import</span><h1>Add a recipe</h1></div>
+   <div class="between"><div class="col-sm"><span class="eyebrow">${editing?"Edit":"Import"}</span>
+     <h1>${editing?esc(D.parsed.name||"Edit recipe"):"Add a recipe"}</h1></div>
      <button class="btn ghost sm" id="cancel">Cancel</button></div>
+   ${editing?"":`
    <div class="card pad col-sm"><span class="eyebrow">From a link</span>
-     <input id="url" placeholder="https://instagram.com/… · pinterest · youtube" value="${esc(D.url)}">
-     <p class="note">Fetching a page is the one thing this prototype genuinely cannot do by itself — a browser page can't read another site, and Instagram and Pinterest both block it outright. On the Pi that's the assistant's job: it fetches, transcribes the video or reads the caption, and hands back a draft you correct here. Until then, paste the text and the parser below does the structural work.</p></div>
-   <div class="card pad col-sm"><span class="eyebrow">Paste the recipe text</span>
-     <textarea id="txt" placeholder="500 g bread flour&#10;4 g instant yeast&#10;10 g sea salt&#10;60 ml olive oil&#10;&#10;Mix and rest 30 minutes.&#10;Bake at 220 C for 22 minutes.">${esc(D.text)}</textarea>
-     <button class="btn amber sm" id="parse" style="align-self:flex-start">Parse it</button></div>
+     <div class="row"><input id="url" placeholder="a recipe page, or a YouTube link" value="${esc(D.url)}" style="flex:1;min-width:220px">
+       <button class="btn amber sm" id="go" ${D.loading?"disabled":""}>${D.loading?"Reading…":"Fetch it"}</button></div>
+     <input id="hint" placeholder="optional — anything the page won't say. “this is 4 portions”, “two pans”" value="${esc(D.hint||"")}">
+     <p class="note">Most recipe sites publish structured data, which is read exactly and for free. YouTube goes through the subtitles. <b>Instagram and Pinterest refuse server fetches</b> — for those, copy the caption and paste it below.</p>
+   </div>
+   ${D.error?`<div class="card pad"><p class="note warn-t">${esc(D.error)}</p></div>`:""}
+   ${D.candidates.length?candidatePicker(D):""}
+   <div class="card pad col-sm"><span class="eyebrow">Or paste the recipe text</span>
+     <textarea id="txt" placeholder="500 g bread flour&#10;4 g instant yeast&#10;10 g sea salt&#10;&#10;Mix and rest 30 minutes.&#10;Bake at 220 C for 22 minutes.">${esc(D.text)}</textarea>
+     <button class="btn amber sm" id="parse" style="align-self:flex-start" ${D.loading?"disabled":""}>${D.loading?"Reading…":"Read it"}</button></div>`}
    ${D.parsed?draftForm(D.parsed):""}`;
+
   $("#cancel").onclick=()=>{DRAFT=null;renderBook()};
-  $("#url").oninput=e=>D.url=e.target.value;
-  $("#txt").oninput=e=>D.text=e.target.value;
-  $("#parse").onclick=()=>{
-    const p=parseText(D.text);
-    if(!p.ing.length)return toast("No quantities found — one ingredient per line, amount first");
-    D.parsed={name:"",cuisine:"Italian",meal:"Dinner",taste:"Savoury",mins:30,
-      medium:"Stove top",vessel:"Saucepan",basis:p.ing[0].id||"",ing:p.ing,steps:p.steps};
-    renderBook()};
+  if(!editing){
+    $("#url").oninput=e=>D.url=e.target.value;
+    $("#url").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();if(D.url.trim())runImport()}};
+    $("#hint").oninput=e=>D.hint=e.target.value;
+    $("#txt").oninput=e=>D.text=e.target.value;
+    $("#go").onclick=()=>{if(!D.url.trim())return toast("Paste a link first");D.text="";runImport()};
+    $("#parse").onclick=()=>{if(!D.text.trim())return toast("Nothing pasted yet");runImport()};
+    $$("[data-cand]").forEach(b=>b.onclick=()=>runImport(+b.dataset.cand));
+  }
   if(D.parsed)wireDraft();
 }
+
+function candidatePicker(D){
+  return `<div class="card pad col-sm"><span class="eyebrow">That page has ${D.candidates.length} recipes — which one?</span>
+    <div class="col-sm">${D.candidates.map(c=>`
+      <button class="btn ghost" data-cand="${c.index}" style="text-align:left;justify-content:flex-start">
+        <b>${esc(c.name)}</b> <span class="note">· ${c.ingredients} ingredients · ${c.mins} min</span>
+      </button>`).join("")}</div></div>`;
+}
+
+/* ── the review form ──────────────────────────────────────────────────────
+ * Everything here is editable and nothing is saved until you say so. Stages
+ * are kept separate because that structure is what the cook board reads.  */
 function draftForm(p){
-  const opts=Object.values(S.pantry);
-  return `<div class="card pad col-sm"><span class="eyebrow">Review — everything here needs your eye</span>
+  const opts=Object.values(S.pantry).sort((a,b)=>a.name.localeCompare(b.name));
+  const conf={high:"g",medium:"",low:"warn"}[p.confidence]||"";
+  return `<div class="card pad col-sm"><div class="between">
+     <span class="eyebrow">Review — everything here needs your eye</span>
+     <span class="row">${DRAFT.provenance?`<span class="tag a">${esc(TIER[DRAFT.provenance]||DRAFT.provenance)}</span>`:""}
+       <span class="tag ${conf}">${p.confidence} confidence</span></span></div>
+   ${(DRAFT.warnings||[]).map(w=>`<p class="note warn-t">${esc(w)}</p>`).join("")}
+   ${p.notes?`<p class="note">${esc(p.notes)}</p>`:""}
    <div class="row"><input id="dName" placeholder="Recipe name" value="${esc(p.name)}" style="flex:1;min-width:180px">
-     <input id="dMins" type="number" value="${p.mins}" style="width:92px" title="minutes"></div>
+     <input id="dMins" type="number" value="${p.mins}" style="width:92px" title="total minutes"></div>
    <div class="row">
      <select id="dCuisine">${CUISINES.map(c=>`<option ${p.cuisine===c?"selected":""}>${c}</option>`).join("")}</select>
      <select id="dMeal">${MEALS.map(c=>`<option ${p.meal===c?"selected":""}>${c}</option>`).join("")}</select>
-     <select id="dTaste">${TASTES.map(c=>`<option ${p.taste===c?"selected":""}>${c}</option>`).join("")}</select>
-     <select id="dMedium">${Object.keys(VESSELS).map(c=>`<option ${p.medium===c?"selected":""}>${c}</option>`).join("")}</select>
-     <select id="dVessel">${(VESSELS[p.medium]||[]).map(c=>`<option ${p.vessel===c?"selected":""}>${c}</option>`).join("")}</select></div>
-   <div class="tw"><table><thead><tr><th>Parsed line</th><th style="text-align:right">Amount</th><th>Maps to</th><th>Basis</th></tr></thead><tbody>
-     ${p.ing.map((g,k)=>`<tr class="${g.id?"":"warn"}"><td class="note">${esc(g.raw)}</td>
-       <td class="n"><input type="number" value="${g.amt}" data-amt="${k}" style="width:78px"></td>
-       <td><select data-map="${k}"><option value="">— unmatched —</option>
-         ${opts.map(o=>`<option value="${o.id}" ${g.id===o.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></td>
-       <td><input type="radio" name="basis" data-basis="${k}" ${p.basis&&p.basis===g.id?"checked":""}></td></tr>`).join("")}
-   </tbody></table></div>
-   <p class="note">Rows highlighted amber didn't match anything in your pantry — map them or they'll be dropped.</p>
-   <span class="eyebrow">Steps</span><textarea id="dSteps">${esc(p.steps.join("\n"))}</textarea>
-   <p class="note">Imported recipes land as one stage. Split them into parallel stages later — the cook board reads whatever structure you give it.</p>
-   <button class="btn amber" id="dSave" style="align-self:flex-start">Save to the recipe book</button></div>`;
+     <select id="dTaste">${TASTES.map(c=>`<option ${p.taste===c?"selected":""}>${c}</option>`).join("")}</select></div>
+
+   ${p.stages.map((st,si)=>`
+     <div class="card pad col-sm" style="margin-top:6px">
+       <div class="row"><input data-sname="${si}" value="${esc(st.name)}" placeholder="Stage name" style="flex:1;min-width:140px">
+         <select data-smedium="${si}">${Object.keys(VESSELS).map(c=>`<option ${st.medium===c?"selected":""}>${c}</option>`).join("")}</select>
+         <select data-svessel="${si}">${(VESSELS[st.medium]||["Board"]).map(c=>`<option ${st.vessel===c?"selected":""}>${c}</option>`).join("")}</select>
+         ${p.stages.length>1?`<button class="btn ghost sm" data-sdel="${si}">Remove stage</button>`:""}</div>
+       ${p.stages.length>1?`<p class="note">Runs after: ${st.needs.length?esc(st.needs.join(", ")):"nothing — it can start immediately"}</p>`:""}
+       <div class="tw"><table><thead><tr><th>Source line</th><th style="text-align:right">Amount</th><th>Unit</th><th>Maps to</th><th>Basis</th><th></th></tr></thead><tbody>
+         ${st.ing.map((g,k)=>`<tr class="${g.id?"":"warn"}">
+           <td class="note">${esc(g.raw||g.name)}</td>
+           <td class="n"><input type="number" step="0.1" value="${g.amt}" data-amt="${si}.${k}" style="width:80px"></td>
+           <td class="note mono">${esc(g.unit||"g")}</td>
+           <td><select data-map="${si}.${k}"><option value="">— unmatched —</option>
+             ${opts.map(o=>`<option value="${o.id}" ${g.id===o.id?"selected":""}>${esc(o.name)}</option>`).join("")}</select></td>
+           <td><input type="radio" name="basis" data-basis="${si}.${k}" ${p.basis&&p.basis===g.id?"checked":""}></td>
+           <td><button class="btn ghost sm" data-idel="${si}.${k}" title="drop this row">×</button></td></tr>`).join("")}
+       </tbody></table></div>
+       <span class="eyebrow">Steps</span>
+       <textarea data-ssteps="${si}" rows="3">${esc(st.steps.join("\n"))}</textarea>
+     </div>`).join("")}
+
+   <div class="row"><button class="btn ghost sm" id="dAddStage">Add a stage</button>
+     <button class="btn amber" id="dSave">${DRAFT.editing?"Save changes":"Save to the recipe book"}</button></div>
+   <p class="note">Amber rows matched nothing you own. Map them or they'll be dropped on save.</p>
+   </div>
+   ${assistPanel("draft")}`;
 }
+
 function wireDraft(){
   const p=DRAFT.parsed;
-  $$("[data-amt]").forEach(i=>i.oninput=()=>p.ing[+i.dataset.amt].amt=parseFloat(i.value)||0);
-  $$("[data-map]").forEach(s=>s.onchange=()=>{p.ing[+s.dataset.map].id=s.value;renderBook()});
-  $$("[data-basis]").forEach(r=>r.onchange=()=>{p.basis=p.ing[+r.dataset.basis].id});
-  $("#dMedium").onchange=e=>{p.medium=e.target.value;p.vessel=(VESSELS[p.medium]||["Board"])[0];renderBook()};
+  const at=k=>{const [a,b]=k.split(".").map(Number);return p.stages[a].ing[b]};
+  $$("[data-amt]").forEach(i=>i.oninput=()=>at(i.dataset.amt).amt=parseFloat(i.value)||0);
+  $$("[data-map]").forEach(s=>s.onchange=()=>{at(s.dataset.map).id=s.value;renderBook()});
+  $$("[data-basis]").forEach(r=>r.onchange=()=>{p.basis=at(r.dataset.basis).id});
+  $$("[data-idel]").forEach(b=>b.onclick=()=>{const[a,k]=b.dataset.idel.split(".").map(Number);
+    p.stages[a].ing.splice(k,1);renderBook()});
+  $$("[data-sname]").forEach(i=>i.oninput=()=>p.stages[+i.dataset.sname].name=i.value);
+  $$("[data-smedium]").forEach(sel=>sel.onchange=()=>{const st=p.stages[+sel.dataset.smedium];
+    st.medium=sel.value;st.vessel=(VESSELS[st.medium]||["Board"])[0];renderBook()});
+  $$("[data-svessel]").forEach(sel=>sel.onchange=()=>p.stages[+sel.dataset.svessel].vessel=sel.value);
+  $$("[data-ssteps]").forEach(t=>t.oninput=()=>p.stages[+t.dataset.ssteps].steps=
+    t.value.split(/\n/).map(x=>x.trim()).filter(Boolean));
+  $$("[data-sdel]").forEach(b=>b.onclick=()=>{p.stages.splice(+b.dataset.sdel,1);renderBook()});
+  $("#dAddStage").onclick=()=>{p.stages.push({name:"New stage",medium:"Stove top",
+    vessel:"Saucepan",needs:[],ing:[],steps:[]});renderBook()};
   const bind=(id,key,num)=>{const el=$(id);if(el)el.oninput=el.onchange=()=>p[key]=num?(parseFloat(el.value)||30):el.value};
   bind("#dName","name");bind("#dMins","mins",true);bind("#dCuisine","cuisine");
-  bind("#dMeal","meal");bind("#dTaste","taste");bind("#dVessel","vessel");
-  $("#dSteps").oninput=e=>p.steps=e.target.value.split(/\n/).map(x=>x.trim()).filter(Boolean);
-  $("#dSave").onclick=()=>{
-    const ing=p.ing.filter(g=>g.id);
-    if(!p.name)return toast("Give it a name");
-    if(!ing.length)return toast("Map at least one ingredient to your pantry");
-    const basis=p.basis||ing[0].id;
-    S.custom.push({id:"cx"+Date.now().toString(36),name:p.name,cuisine:p.cuisine,meal:p.meal,
-      taste:p.taste,mins:p.mins,themes:[],basis,source:DRAFT.url||"pasted",
-      stages:[{id:"main",name:"Everything",medium:p.medium,vessel:p.vessel,needs:[],
-        ing:ing.map(g=>({id:g.id,amt:g.amt,station:"direct"})),
-        steps:(p.steps.length?p.steps:["Cook it."]).map(t=>({t,mins:5}))}]});
-    save();DRAFT=null;renderBook();toast("Saved — it's in the book and in Decide")};
+  bind("#dMeal","meal");bind("#dTaste","taste");
+  $("#dSave").onclick=saveDraft;
+  wireAssist("draft");
+}
+
+function saveDraft(){
+  const p=DRAFT.parsed;
+  if(!p.name)return toast("Give it a name");
+  const stages=p.stages.map((st,i)=>({
+    id:"s"+i, name:st.name||("Stage "+(i+1)), medium:st.medium, vessel:st.vessel,
+    needs:st.needs||[],
+    ing:st.ing.filter(g=>g.id).map(g=>({id:g.id,amt:g.amt,station:g.station||"direct"})),
+    steps:(st.steps.length?st.steps:["Cook it."]).map(t=>({t,mins:5}))
+  })).filter(st=>st.ing.length||st.steps.length);
+  const total=stages.reduce((n,st)=>n+st.ing.length,0);
+  if(!total)return toast("Map at least one ingredient to your pantry");
+  const basis=p.basis||stages.find(st=>st.ing.length).ing[0].id;
+  const rec={id:DRAFT.editing||("cx"+Date.now().toString(36)), name:p.name, cuisine:p.cuisine,
+    meal:p.meal, taste:p.taste, mins:p.mins, themes:p.themes||[], basis,
+    source:DRAFT.url||DRAFT.source||"pasted", stages};
+  S.custom=S.custom||[];
+  const at=S.custom.findIndex(r=>r.id===rec.id);
+  if(at>=0) S.custom[at]=rec; else S.custom.push(rec);
+  if(DRAFT.hideBuiltin){ S.hidden=S.hidden||[]; if(!S.hidden.includes(DRAFT.hideBuiltin)) S.hidden.push(DRAFT.hideBuiltin); }
+  save();DRAFT=null;renderBook();
+  toast(at>=0?"Updated":"Saved — it's in the book and in Decide");
+}
+
+/* Open a saved recipe back into the same form. Editing a built-in saves a copy
+ * and hides the original, so the built-ins stay intact underneath. */
+function editRecipe(id){
+  const r=RECIPES().find(x=>x.id===id); if(!r)return toast("Can't find that one");
+  const builtin=!(S.custom||[]).some(x=>x.id===id);
+  DRAFT={url:"",text:"",hint:"",candidates:[],warnings:[],provenance:"",chat:[],proposal:null,
+    editing:builtin?("cx"+Date.now().toString(36)):r.id, hideBuiltin:builtin?r.id:null,
+    source:r.source||"",
+    parsed:{name:r.name+(builtin?" (edited)":""),cuisine:r.cuisine,meal:r.meal,taste:r.taste,
+      mins:r.mins,themes:r.themes||[],notes:builtin?"A copy of a built-in recipe. The original stays untouched underneath.":"",
+      confidence:"high",basis:r.basis,
+      stages:r.stages.map(st=>({name:st.name,medium:st.medium,vessel:st.vessel,needs:st.needs||[],
+        ing:st.ing.map(g=>({raw:(S.pantry[g.id]||{}).name||g.id,name:(S.pantry[g.id]||{}).name||g.id,
+          amt:g.amt,unit:(S.pantry[g.id]||{}).unit||"g",id:g.id,station:g.station||"direct"})),
+        steps:st.steps.map(x=>x.t)}))}};
+  renderBook();
+}
+
+/* ══ THE ASSISTANT ════════════════════════════════════════════════════════
+ * It proposes. You approve. Python applies.
+ *
+ * The model never gets a write path. It receives a read-only snapshot and
+ * returns a change-set that this file renders as a diff. Only your click turns
+ * that into real writes, and those go through the same endpoints your own
+ * clicks use — so there is one write path in the system, not two.
+ *
+ * The practical consequence: the worst a confused model can do is waste your
+ * time. It cannot quietly change a number you never looked at.
+ * ════════════════════════════════════════════════════════════════════════ */
+function assistPanel(scope){
+  scope = scope || "draft";
+  const D = scope==="draft" ? DRAFT : ASSIST;
+  if(!D) return "";
+  const busy=D.busy?"disabled":"";
+  // Every view is in the DOM at once — they're shown and hidden, not swapped —
+  // so these ids must be unique per scope or the handlers all bind to whichever
+  // panel happens to come first in the document.
+  return `<div class="card pad col-sm" id="assist-${scope}" data-scope="${scope}">
+    <span class="eyebrow">Assistant — it proposes, you approve</span>
+    ${(D.chat||[]).map(m=>`<div class="${m.role==="user"?"note mono":"why"}" style="padding:2px 0">
+      <b>${m.role==="user"?"You":"Mise"}:</b> ${esc(m.content)}</div>`).join("")}
+    ${D.proposal?proposalDiff(D.proposal,scope):""}
+    <div class="row"><input id="aMsg-${scope}" placeholder="${esc(assistHint(scope))}" style="flex:1;min-width:220px" ${busy}>
+      <button class="btn amber sm" id="aSend-${scope}" ${busy}>${D.busy?"Thinking…":"Ask"}</button></div>
+    <p class="note">Nothing it suggests is applied until you press <b>Apply</b>. Every change is shown first.</p>
+  </div>`;
+}
+function assistHint(scope){
+  return {draft:"“the yeast should be 7 g”, “split the sauce into its own stage”, “this is 4 portions”",
+    pantry:"“I used about half the olive oil”, “the yoghurt expires Friday”",
+    shop:"“what am I short of for focaccia?”, “add pantry staples I'm low on”"}[scope]
+    ||"ask for a change";
+}
+
+function proposalDiff(pr,scope){
+  const rows=[];
+  (pr.pantry||[]).forEach(op=>{
+    const it=S.pantry[op.id]||{};
+    let what="";
+    if(op.op==="add") what=`<b>add</b> ${esc(op.name||"?")}${op.qty!=null?` — ${op.qty} ${esc(op.unit||"g")}`:""}`;
+    else if(op.op==="set_qty") what=`<b>${esc(it.name||op.id)}</b> — quantity <span class="mono">${it.qty}</span> → <span class="mono">${op.qty}</span>`;
+    else if(op.op==="adjust") what=`<b>${esc(it.name||op.id)}</b> — <span class="mono">${op.qty>0?"+":""}${op.qty}</span> (now ${Math.round(((it.qty||0)+(op.qty||0))*10)/10})`;
+    else if(op.op==="set_field") what=`<b>${esc(it.name||op.id)}</b> — ${esc(op.field)} <span class="mono">${esc(String(it[op.field]??"—"))}</span> → <span class="mono">${esc(String(op.value))}</span>`;
+    else if(op.op==="remove") what=`<b>remove</b> ${esc(it.name||op.id)}`;
+    rows.push(`<li>${what}${op.why?` <span class="note">— ${esc(op.why)}</span>`:""}</li>`);
+  });
+  (pr.shop||[]).forEach(op=>rows.push(
+    `<li><b>shopping list</b> — ${esc(op.name)}${op.qty!=null?` (${op.qty} ${esc(op.unit||"")})`:""}${op.why?` <span class="note">— ${esc(op.why)}</span>`:""}</li>`));
+  if(pr.draft) rows.push(`<li><b>this recipe</b> — ${draftDelta(pr.draft)}</li>`);
+
+  if((pr.questions||[]).length && !rows.length)
+    return `<div class="card pad col-sm"><span class="eyebrow">It needs to know</span>
+      <ul class="note">${pr.questions.map(q=>`<li>${esc(q)}</li>`).join("")}</ul></div>`;
+  if(!rows.length) return "";
+  return `<div class="card pad col-sm"><span class="eyebrow">Proposed — nothing applied yet</span>
+    <p class="why">${esc(pr.summary||"")}</p>
+    <ul class="note" style="margin:0;padding-left:18px">${rows.join("")}</ul>
+    ${(pr.questions||[]).length?`<p class="note warn-t">Also asks: ${pr.questions.map(esc).join(" · ")}</p>`:""}
+    <div class="row"><button class="btn amber sm" id="aApply-${scope}">Apply</button>
+      <button class="btn ghost sm" id="aDrop-${scope}">Discard</button></div></div>`;
+}
+
+/* A field-by-field comparison against what's on screen, so a revised draft is
+ * reviewable rather than a wall of JSON you'd rubber-stamp. */
+function draftDelta(nd){
+  const p=DRAFT&&DRAFT.parsed; if(!p) return "a revised version";
+  const bits=[];
+  ["name","cuisine","meal","taste","mins"].forEach(k=>{
+    if(nd[k]!=null && String(nd[k])!==String(p[k])) bits.push(`${k}: <span class="mono">${esc(String(p[k]))}</span> → <span class="mono">${esc(String(nd[k]))}</span>`);
+  });
+  const oldI={}; p.stages.forEach(st=>st.ing.forEach(g=>oldI[g.name.toLowerCase()]=g));
+  const newI={}; (nd.stages||[]).forEach(st=>(st.ing||[]).forEach(g=>newI[g.name.toLowerCase()]=g));
+  Object.keys(newI).forEach(k=>{
+    if(!oldI[k]) bits.push(`+ ${esc(newI[k].name)} ${newI[k].amt}${esc(newI[k].unit||"")}`);
+    else if(Math.abs(oldI[k].amt-newI[k].amt)>0.001)
+      bits.push(`${esc(newI[k].name)}: <span class="mono">${oldI[k].amt}</span> → <span class="mono">${newI[k].amt}${esc(newI[k].unit||"")}</span>`);
+  });
+  Object.keys(oldI).forEach(k=>{ if(!newI[k]) bits.push(`− ${esc(oldI[k].name)}`) });
+  const ns=(nd.stages||[]).length, os=p.stages.length;
+  if(ns!==os) bits.push(`stages: <span class="mono">${os}</span> → <span class="mono">${ns}</span>`);
+  return bits.length?bits.join("; "):"no visible difference";
+}
+
+let ASSIST={scope:"pantry",chat:[],proposal:null,busy:false};
+
+function wireAssist(scope){
+  scope = scope || "draft";
+  const D = scope==="draft" ? DRAFT : ASSIST;
+  if(!D) return;
+  const send=$("#aSend-"+scope), box=$("#aMsg-"+scope);
+  if(!send||!box) return;
+  const go=async()=>{
+    const msg=(box.value||"").trim(); if(!msg) return;
+    if(!serverUp()) return toast("The assistant needs the server — the Pi isn't reachable");
+    D.chat=D.chat||[]; D.chat.push({role:"user",content:msg});
+    D.busy=true; D.proposal=null; box.value=""; rerenderScope(scope);
+    try{
+      const res=await post("/api/assist/chat",{
+        message:msg, scope,
+        draft:scope==="draft"?serverShapeDraft(DRAFT.parsed):null,
+        history:D.chat.slice(-6).map(m=>({role:m.role,content:m.content}))});
+      D.chat.push({role:"assistant",content:res.reply||""});
+      D.proposal=res.proposal||null; D.lastMatched=res.matched||[];
+    }catch(err){
+      D.chat.push({role:"assistant",content:"That didn't work: "+String(err.message||err)});
+    }
+    D.busy=false; rerenderScope(scope);
+  };
+  send.onclick=go;
+  box.onkeydown=e=>{ if(e.key==="Enter"){e.preventDefault();go()} };
+  const ap=$("#aApply-"+scope), dr=$("#aDrop-"+scope);
+  if(ap) ap.onclick=()=>applyProposal(D,scope);
+  if(dr) dr.onclick=()=>{D.proposal=null;rerenderScope(scope)};
+}
+function rerenderScope(scope){
+  if(scope==="pantry") renderPantry();
+  else if(scope==="shop") renderShop();
+  else renderBook();
+}
+
+/* Turn the on-screen draft back into the server's shape so the model sees
+ * exactly what you see — including edits you made by hand since the import. */
+function serverShapeDraft(p){
+  return {name:p.name,cuisine:p.cuisine,meal:p.meal,taste:p.taste,mins:p.mins,
+    servings:p.servings||null,basis_name:null,confidence:p.confidence||"medium",
+    stages:p.stages.map(st=>({name:st.name,medium:st.medium,vessel:st.vessel,needs:st.needs||[],
+      ing:st.ing.map(g=>({raw:g.raw||"",name:g.name,amt:g.amt,unit:g.unit||"g",
+                          station:g.station||"prep",optional:false})),
+      steps:st.steps.map(t=>({t,mins:5}))}))};
+}
+
+/* Applying. Note what this does NOT do: it never posts the model's output
+ * anywhere. It replays the change-set through adjustQty and save() — the same
+ * two paths your own edits use. */
+async function applyProposal(D,scope){
+  const pr=D.proposal; if(!pr) return;
+  let n=0;
+  for(const op of (pr.pantry||[])){
+    const it=S.pantry[op.id];
+    if(op.op==="add"){
+      const id="px"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+      S.pantry[id]={id,name:op.name,qty:op.qty||0,unit:op.unit||"g",cls:"condiment",
+        shelf:180,low:0,bought:iso(today),expires:null,integer:false};n++;
+    } else if(!it){ continue;
+    } else if(op.op==="set_qty"){ it.qty=op.qty; if(window.MiseAPI)MiseAPI.adjustQty(it.id,null,{absolute:op.qty}); n++;
+    } else if(op.op==="adjust"){ it.qty=Math.max(0,Math.round((it.qty+(op.qty||0))*10)/10);
+      if(window.MiseAPI)MiseAPI.adjustQty(it.id,op.qty||0); n++;
+    } else if(op.op==="set_field"){ it[op.field]=op.value; n++;
+    } else if(op.op==="remove"){ delete S.pantry[op.id]; n++; }
+  }
+  if((pr.shop||[]).length){
+    // The basket holds pantry ids, not free text — so match first, and only
+    // fall back to a loose note when the thing genuinely isn't a pantry row.
+    S.basket=S.basket||[]; S.extras=S.extras||[];
+    pr.shop.forEach(o=>{
+      const id=guessPantry(o.name);
+      if(id){ if(!S.basket.includes(id)){S.basket.push(id);n++} }
+      else if(!S.extras.some(x=>x.name.toLowerCase()===o.name.toLowerCase())){
+        S.extras.push({name:o.name,qty:o.qty||null,unit:o.unit||"",why:o.why||""});n++}
+    });
+  }
+  if(pr.draft && scope==="draft" && DRAFT){
+    const merged=draftFromServer({draft:pr.draft,matched:D.lastMatched||[]});
+    merged.basis=DRAFT.parsed.basis||merged.basis;
+    flatIng(merged).forEach(g=>{ if(!g.id) g.id=guessPantry(g.name) });
+    DRAFT.parsed=merged; n++;
+  }
+  D.proposal=null; save(); rerenderScope(scope);
+  toast(n?`Applied ${n} change${n>1?"s":""}`:"Nothing to apply");
 }
 
 /* ══ PANTRY ══ */
 function renderPantry(){
+  ASSIST.scope="pantry";
   const rows=Object.values(S.pantry).sort((a,b)=>
     (a.expires?days(a.expires):9999)-(b.expires?days(b.expires):9999));
   $("#v-pantry").innerHTML=`
@@ -1129,7 +1485,9 @@ function renderPantry(){
      </tbody></table></div>
      <p class="note">The cook board warns you when two stages wanting the same vessel are running at once.</p></div>
    <div class="card pad col-sm"><span class="eyebrow">On weighing what you bought</span>
-     <p class="note">Don't weigh contents separately — keep a tare table. Open Food Facts returns net quantity for most EU products, so packaging tare is gross minus net, measured once per packaging type and reused. Decant into your own jar, weigh the empty jar once, save it as that container's tare. Same table a filling line keeps.</p></div>`;
+     <p class="note">Don't weigh contents separately — keep a tare table. Open Food Facts returns net quantity for most EU products, so packaging tare is gross minus net, measured once per packaging type and reused. Decant into your own jar, weigh the empty jar once, save it as that container's tare. Same table a filling line keeps.</p></div>
+   ${assistPanel("pantry")}`;
+  wireAssist("pantry");
   chips("#cIntake",["manual","automatic"],o=>S.intakeMode===o,o=>S.intakeMode=o);
   chips("#apps",S.appliances.map(a=>a.name),n=>S.appliances.find(a=>a.name===n).have,
     n=>{const a=S.appliances.find(x=>x.name===n);a.have=!a.have});
@@ -1167,6 +1525,7 @@ function intakeRun(){
 
 /* ══ SHOP ══ */
 function renderShop(){
+  ASSIST.scope="shop";
   const low=lowStock(),unl=unlocks(),inB=id=>S.basket.includes(id);
   const line=(id,right,sub)=>`<div class="shopitem"><input type="checkbox" data-b="${id}" ${inB(id)?"checked":""}>
     <div><b>${esc(nm(id))}</b> <span class="nl">${esc(nlOf(id))}</span>${sub?`<div class="note">${sub}</div>`:""}</div>
@@ -1189,8 +1548,16 @@ function renderShop(){
    <div class="card pad col-sm"><span class="eyebrow">Buy one thing</span>
      ${unl[0]?`<p style="font-size:1.05rem">Buy <b>${esc(nm(unl[0].id))}</b> <span class="nl">${esc(nlOf(unl[0].id))}</span> — €${(P(unl[0].id)?.price||0).toFixed(2)} unlocks ${unl[0].recipes.length}.</p>
        <p class="note">${esc(unl[0].recipes.join(" · "))}</p>`:`<p class="note">Nothing blocked.</p>`}</div>
+   ${(S.extras||[]).length?`<div class="card pad col-sm"><span class="eyebrow">Also on the list</span>
+     ${S.extras.map((x,i)=>`<div class="shopitem"><div><b>${esc(x.name)}</b>${x.qty?` <span class="note">${x.qty} ${esc(x.unit||"")}</span>`:""}
+       ${x.why?`<div class="note">${esc(x.why)}</div>`:""}</div>
+       <div style="text-align:right"><button class="btn ghost sm" data-xdel="${i}">×</button></div></div>`).join("")}
+     <p class="note">Things the assistant suggested that aren't pantry rows yet. Scan them at intake and they'll become real.</p></div>`:""}
    <div class="row"><button class="btn amber" id="confirmBuy">Confirm what I actually bought (${S.basket.length})</button>
-     <button class="btn ghost sm" id="clearBasket">Clear ticks</button></div>`;
+     <button class="btn ghost sm" id="clearBasket">Clear ticks</button></div>
+   ${assistPanel("shop")}`;
+  $$("[data-xdel]").forEach(b=>b.onclick=()=>{S.extras.splice(+b.dataset.xdel,1);save();renderShop()});
+  wireAssist("shop");
   $$("[data-b]").forEach(c=>c.onchange=()=>{
     S.basket=c.checked?[...new Set([...S.basket,c.dataset.b])]:S.basket.filter(x=>x!==c.dataset.b);
     save();$("#confirmBuy").textContent=`Confirm what I actually bought (${S.basket.length})`});
@@ -1368,7 +1735,7 @@ function renderHub(){
   }
   if(!S.pantry||!Object.keys(S.pantry).length)S=fresh();
   seedHistory();renderBell();
-  if(shared){DRAFT={url:/^https?:/i.test(shared)?shared:"",text:/^https?:/i.test(shared)?"":shared,parsed:null};go("book");}
+  if(shared){DRAFT=Object.assign(newDraft(),{url:/^https?:/i.test(shared)?shared:"",text:/^https?:/i.test(shared)?"":shared});go("book");}
   else renderDecide();
 })();
 </script>
