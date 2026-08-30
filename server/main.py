@@ -237,6 +237,8 @@ async def assist_chat(body: ChatRequest) -> ChatResponse:
     try:
         return await assistant.chat(body.message, body.scope, body.draft,
                                     body.history, pantry)
+    except assistant.ProviderError as e:
+        raise HTTPException(502, str(e))
     except RuntimeError:
         raise HTTPException(503, "No model API key configured on the server — set one in .env.")
     except Exception as e:
@@ -249,6 +251,8 @@ async def assist_adapt(body: AdaptRequest) -> dict[str, Any]:
     names = [p["name"] for p in pantry.values() if p.get("qty", 0) > 0]
     try:
         return await assistant.adapt(body.recipe, body.instruction, names)
+    except assistant.ProviderError as e:
+        raise HTTPException(502, str(e))
     except RuntimeError:
         raise HTTPException(503, "No model API key configured on the server — set one in .env.")
     except Exception as e:
@@ -256,15 +260,32 @@ async def assist_adapt(body: AdaptRequest) -> dict[str, Any]:
 
 
 @app.get("/api/assist/health")
-def assist_health() -> dict[str, Any]:
+async def assist_health(probe: bool = False) -> dict[str, Any]:
+    """What's configured — and, with ?probe=1, whether it actually works.
+
+    A key being present says nothing about whether the provider will accept it.
+    The probe makes one tiny real call and reports exactly what came back, which
+    is the difference between "the assistant is broken" and "your key isn't
+    enabled for this API yet".
+    """
     import os
     import shutil
     prov = assistant.which_provider()
-    return {"model_key": prov is not None,
-            "provider": prov[0].replace("_API_KEY", "").title() if prov else None,
-            "model": prov[3] if prov else None,
-            "yt_dlp": shutil.which("yt-dlp") is not None,
-            "tiers": ["json-ld", "youtube-transcript", "page-text", "pasted-text", "regex"]}
+    out: dict[str, Any] = {
+        "model_key": prov is not None,
+        "provider": prov[0].replace("_API_KEY", "").title() if prov else None,
+        "model": prov[3] if prov else None,
+        "yt_dlp": shutil.which("yt-dlp") is not None,
+        "tiers": ["json-ld", "youtube-transcript", "page-text", "pasted-text", "regex"]}
+    if probe:
+        out["probe"] = await assistant.probe()
+    return out
+
+
+@app.get("/api/assist/models")
+async def assist_models() -> dict[str, Any]:
+    """Which model names this key can actually see. Fixes 404s in one look."""
+    return await assistant.list_models()
 
 
 # ── scale ───────────────────────────────────────────────────────────────────

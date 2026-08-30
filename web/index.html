@@ -1006,10 +1006,16 @@ function renderBook(){
          <span class="tag b">${x.r.stages.length} stages</span>${x.r.source?`<span class="tag a">imported</span>`:""}
          <span class="tag ${x.a.missing.length?"":"g"}">${Math.round(x.a.cov*100)}% in stock</span></div>
        <p class="why">${x.mae!=null?`avg error ${x.mae.toFixed(2)}% · avg ${fmtT(x.tm)}`:"never cooked"}${x.note?` · “${esc(x.note)}”`:""}</p>
-       <button class="btn ghost sm" data-edit="${x.r.id}" style="align-self:flex-start">Edit</button>
-     </div></div>`).join("")}</div>`;
+       <div class="row"><button class="btn ghost sm" data-edit="${x.r.id}">Edit</button>
+         <button class="btn ghost sm" data-del="${x.r.id}">Delete</button></div>
+     </div></div>`).join("")}</div>
+   ${(S.hidden||[]).length?`<div class="card pad col-sm"><span class="eyebrow">${S.hidden.length} built-in recipe${S.hidden.length>1?"s":""} hidden</span>
+     <p class="note">Built-ins are hidden rather than destroyed — the originals are in the code, so they can always come back.</p>
+     <button class="btn ghost sm" id="unhide" style="align-self:flex-start">Restore them</button></div>`:""}`;
   $("#imp").onclick=()=>{DRAFT=newDraft();renderBook()};
   $$("[data-edit]").forEach(b=>b.onclick=e=>{e.stopPropagation();editRecipe(b.dataset.edit)});
+  $$("[data-del]").forEach(b=>b.onclick=e=>{e.stopPropagation();deleteRecipe(b.dataset.del)});
+  const uh=$("#unhide");if(uh)uh.onclick=()=>{S.hidden=[];save();renderBook();toast("Built-ins restored")};
   $$("[data-open]").forEach(b=>b.onclick=()=>openBrief(b.dataset.open));
 }
 /* ══ IMPORT ═══════════════════════════════════════════════════════════════
@@ -1119,7 +1125,7 @@ const TIER={"json-ld":"the page's own structured data — no model involved",
   "youtube-transcript":"the video's subtitles, read by the model",
   "page-text":"the page text, read by the model",
   "pasted-text":"your pasted text, read by the model",
-  "regex":"the local parser — no model key configured",
+  "regex":"the local parser — the model didn't answer",
   "browser-regex":"the browser's own parser — the server was unreachable"};
 
 function renderDraft(){
@@ -1134,6 +1140,9 @@ function renderDraft(){
        <button class="btn amber sm" id="go" ${D.loading?"disabled":""}>${D.loading?"Reading…":"Fetch it"}</button></div>
      <input id="hint" placeholder="optional — anything the page won't say. “this is 4 portions”, “two pans”" value="${esc(D.hint||"")}">
      <p class="note">Most recipe sites publish structured data, which is read exactly and for free. YouTube goes through the subtitles. <b>Instagram and Pinterest refuse server fetches</b> — for those, copy the caption and paste it below.</p>
+     <button class="btn ghost sm" id="diag" style="align-self:flex-start">Check the model connection</button>
+     ${D.diag?`<div class="card pad"><span class="eyebrow">Model connection</span>
+       <p class="note mono" style="white-space:pre-wrap;margin-top:6px">${esc(D.diag)}</p></div>`:""}
    </div>
    ${D.error?`<div class="card pad"><p class="note warn-t">${esc(D.error)}</p></div>`:""}
    ${D.candidates.length?candidatePicker(D):""}
@@ -1150,6 +1159,22 @@ function renderDraft(){
     $("#txt").oninput=e=>D.text=e.target.value;
     $("#go").onclick=()=>{if(!D.url.trim())return toast("Paste a link first");D.text="";runImport()};
     $("#parse").onclick=()=>{if(!D.text.trim())return toast("Nothing pasted yet");runImport()};
+    $("#diag").onclick=async()=>{
+      D.diag="checking…"; renderBook();
+      try{
+        const h=await (await fetch("/api/assist/health?probe=1")).json();
+        let out=`provider: ${h.provider||"none configured"}\nmodel:    ${h.model||"—"}\n`;
+        out+= h.probe? (h.probe.ok?"probe:    OK — the model answered":`probe:    FAILED\n${h.probe.error}`)
+                     : "probe:    not run";
+        if(h.probe&&!h.probe.ok&&h.probe.status===404){
+          const m=await (await fetch("/api/assist/models")).json();
+          if(m.ok) out+=`\n\nModels this key can see:\n  ${m.available.slice(0,25).join("\n  ")}`+
+            `\n\nPut a working one in .env as MISE_MODEL= and restart.`;
+        }
+        D.diag=out;
+      }catch(e){ D.diag="Couldn't reach the server: "+String(e.message||e); }
+      renderBook();
+    };
     $$("[data-cand]").forEach(b=>b.onclick=()=>runImport(+b.dataset.cand));
   }
   if(D.parsed)wireDraft();
@@ -1204,6 +1229,7 @@ function draftForm(p){
      </div>`).join("")}
 
    <div class="row"><button class="btn ghost sm" id="dAddStage">Add a stage</button>
+     ${DRAFT.editing&&(S.custom||[]).some(x=>x.id===DRAFT.editing)?`<button class="btn ghost sm" id="dDelete">Delete this recipe</button>`:""}
      <button class="btn amber" id="dSave">${DRAFT.editing?"Save changes":"Save to the recipe book"}</button></div>
    <p class="note">Amber rows matched nothing you own. Map them or they'll be dropped on save.</p>
    </div>
@@ -1231,6 +1257,8 @@ function wireDraft(){
   bind("#dName","name");bind("#dMins","mins",true);bind("#dCuisine","cuisine");
   bind("#dMeal","meal");bind("#dTaste","taste");
   $("#dSave").onclick=saveDraft;
+  const dd=$("#dDelete");
+  if(dd) dd.onclick=()=>{const id=DRAFT.editing;DRAFT=null;deleteRecipe(id)};
   wireAssist("draft");
 }
 
@@ -1273,6 +1301,24 @@ function editRecipe(id){
           amt:g.amt,unit:(S.pantry[g.id]||{}).unit||"g",id:g.id,station:g.station||"direct"})),
         steps:st.steps.map(x=>x.t)}))}};
   renderBook();
+}
+
+/* Deleting. A recipe you imported is yours to destroy; a built-in is hidden
+ * instead, because the original lives in the code and pretending to delete it
+ * would be a lie. Either way the cook log is left alone — logged cooks are
+ * measurements, and you don't delete a measurement because you deleted its
+ * recipe. */
+function deleteRecipe(id){
+  const r=RECIPES().find(x=>x.id===id); if(!r) return;
+  const custom=(S.custom||[]).some(x=>x.id===id);
+  const cooks=S.log.filter(l=>l.id===id).length;
+  const msg=`Delete “${r.name}”?`+
+    (cooks?`\n\n${cooks} logged cook${cooks>1?"s":""} will stay in your data — the history is kept, only the recipe goes.`:"")+
+    (custom?"":"\n\nThis is a built-in, so it will be hidden rather than destroyed. You can restore it.");
+  if(!confirm(msg)) return;
+  if(custom) S.custom=S.custom.filter(x=>x.id!==id);
+  else { S.hidden=S.hidden||[]; if(!S.hidden.includes(id)) S.hidden.push(id); }
+  save(); renderBook(); toast(custom?"Deleted":"Hidden");
 }
 
 /* ══ THE ASSISTANT ════════════════════════════════════════════════════════

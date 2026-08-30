@@ -43,7 +43,10 @@ TO_BASE = {
     "oz": 28.35, "ounce": 28.35, "lb": 453.6, "pound": 453.6,
     "ea": 1, "x": 1, "": 1,
 }
-COUNT_UNITS = {"ea", "x", ""}
+COUNT_UNITS = {"ea", "x", "",
+               "stalk", "stalks", "clove", "cloves", "slice", "slices",
+               "piece", "pieces", "can", "cans", "tin", "tins",
+               "sprig", "sprigs", "bunch", "bunches"}
 
 
 def to_base(amt: float, unit: str) -> tuple[float, str]:
@@ -122,24 +125,53 @@ def _iso_minutes(s: str | None) -> int:
     return int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
 
 
+# Recipe writers use ½ and ¼ constantly and they are not digits, so a bare \d
+# regex silently drops those lines — which is how "½ cup dashi" vanishes from an
+# import and you don't notice until the pan is dry.
+VULGAR = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4",
+          "⅕": "1/5", "⅖": "2/5", "⅗": "3/5", "⅘": "4/5", "⅙": "1/6",
+          "⅚": "5/6", "⅐": "1/7", "⅛": "1/8", "⅜": "3/8", "⅝": "5/8",
+          "⅞": "7/8", "⅑": "1/9", "⅒": "1/10", "−": "-", "–": "-"}
+
+
+def _defraction(line: str) -> str:
+    for k, v in VULGAR.items():
+        line = line.replace(k, v)
+    # "1 1/2 cups" -> "1.5 cups"
+    line = re.sub(r"\b(\d+)\s+(\d+)/(\d+)\b",
+                  lambda m: str(round(int(m.group(1)) + int(m.group(2)) / int(m.group(3)), 4)), line)
+    return line
+
+
 QTY_LINE = re.compile(
     r"^\s*(?:[-*•]\s*)?(\d+(?:[.,/]\d+)?)\s*"
-    r"(kg|g|gram[s]?|ml|l|liter|litre|tbsp|tablespoon[s]?|tsp|teaspoon[s]?|cups?|oz|lb|el|tl)?\s*"
-    r"(.{2,70})$", re.I)
+    r"(kg|g|gram[s]?|ml|l|liter|litre|tbsp|tablespoon[s]?|tsp|teaspoon[s]?|cups?|oz|lb|"
+    r"stalks?|cloves?|slices?|pieces?|cans?|tins?|sprigs?|bunch(?:es)?|el|tl)?"
+    r"(?=\s|$)\s*"
+    r"(.{2,120})$", re.I)
 
 
 def _parse_ing_line(line: str) -> DraftIngredient | None:
-    m = QTY_LINE.match(line.strip())
+    line = _defraction(line.strip())
+    m = QTY_LINE.match(line)
     if not m:
         return None
     raw_amt = m.group(1).replace(",", ".")
     try:
-        amt = eval(raw_amt) if "/" in raw_amt else float(raw_amt)  # noqa: S307 - digits only
+        if "/" in raw_amt:
+            num, den = raw_amt.split("/", 1)
+            amt = float(num) / float(den)
+        else:
+            amt = float(raw_amt)
     except Exception:
         return None
     if amt <= 0:
         return None
-    return DraftIngredient(raw=line.strip(), name=m.group(3).strip(" ,."),
+    name = m.group(3).strip(" ,.")
+    # Drop the parenthetical the writer added for the reader, not the scale:
+    # "White Onion, sliced (about 1/4 cup)" is an onion, not a cup.
+    name = re.sub(r"\s*\([^)]*\)", "", name).strip(" ,.")
+    return DraftIngredient(raw=line, name=name or m.group(3).strip(" ,."),
                            amt=amt, unit=(m.group(2) or "ea").lower())
 
 
@@ -310,6 +342,36 @@ def which_provider() -> tuple[str, str, str, str] | None:
     return None
 
 
+class ProviderError(Exception):
+    """A model call that failed, carrying enough detail to actually fix it.
+
+    `HTTPStatusError` on its own tells you nothing — you cannot tell a bad key
+    from a retired model name from a rate limit. The provider always says which
+    in the response body, so that body is what gets shown.
+    """
+    def __init__(self, provider: str, model: str, status: int, detail: str):
+        self.status, self.detail = status, detail
+        super().__init__(f"{provider} returned HTTP {status} for model "
+                         f"'{model}' — {detail}")
+
+
+def _raise_readable(r: "httpx.Response", var: str, model: str) -> None:
+    if r.is_success:
+        return
+    provider = var.replace("_API_KEY", "").title()
+    try:
+        j = r.json()
+        detail = (j.get("error", {}).get("message")
+                  if isinstance(j.get("error"), dict) else None) or json.dumps(j)
+    except Exception:
+        detail = r.text
+    hint = {401: " (the key is wrong or not activated)",
+            403: " (the key is rejected — check it's enabled for this API)",
+            404: " (that model name doesn't exist for this key)",
+            429: " (you've hit the free-tier rate limit — wait and retry)"}.get(r.status_code, "")
+    raise ProviderError(provider, model, r.status_code, str(detail)[:300] + hint)
+
+
 def _build_prompt(source_text: str, hint: str | None) -> str:
     user = f"Source:\n\n{source_text[:14000]}"
     if hint:
@@ -353,7 +415,7 @@ async def call_model(source_text: str, hint: str | None = None) -> list[RecipeDr
                 "content-type": "application/json"},
                 json={"model": model, "max_tokens": 3000, "system": SYSTEM,
                       "messages": [{"role": "user", "content": user}]})
-            r.raise_for_status()
+            _raise_readable(r, var, model)
             body = r.json()
             text = "".join(b.get("text", "") for b in body.get("content", []))
         else:
@@ -374,7 +436,7 @@ async def call_model(source_text: str, hint: str | None = None) -> list[RecipeDr
                 r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
                                                 "Content-Type": "application/json"},
                                   json=payload)
-            r.raise_for_status()
+            _raise_readable(r, var, model)
             body = r.json()
             text = body["choices"][0]["message"]["content"] or ""
 
@@ -416,8 +478,12 @@ async def build_drafts(url: str | None, text: str | None, hint: str | None
         except RuntimeError:
             warnings.append(why_regex)
             return [regex_draft(src)], "regex", warnings
+        except ProviderError as e:
+            warnings.append(f"The model call failed, so this was parsed locally instead. {e}")
+            return [regex_draft(src)], "regex", warnings
         except Exception as e:
-            warnings.append(f"Model call failed ({type(e).__name__}); fell back to the regex parser.")
+            warnings.append(f"Model call failed ({type(e).__name__}: {str(e)[:200]}); "
+                            "fell back to the regex parser.")
             return [regex_draft(src)], "regex", warnings
 
     if text and text.strip():
@@ -523,7 +589,7 @@ async def adapt(recipe: dict[str, Any], instruction: str, pantry_names: list[str
                               json={"model": model, "max_tokens": 1500,
                                     "system": ADAPT_SYSTEM,
                                     "messages": [{"role": "user", "content": content}]})
-            r.raise_for_status()
+            _raise_readable(r, var, model)
             text = "".join(b.get("text", "") for b in r.json().get("content", []))
         else:
             body = {"model": model, "max_tokens": 1500,
@@ -536,7 +602,7 @@ async def adapt(recipe: dict[str, Any], instruction: str, pantry_names: list[str
                 body.pop("response_format", None)
                 r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
                                                 "Content-Type": "application/json"}, json=body)
-            r.raise_for_status()
+            _raise_readable(r, var, model)
             text = r.json()["choices"][0]["message"]["content"] or ""
 
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
@@ -616,7 +682,7 @@ async def chat(message: str, scope: str, draft: dict[str, Any] | None,
                                             "content-type": "application/json"},
                               json={"model": model, "max_tokens": 3000,
                                     "system": CHAT_SYSTEM, "messages": msgs})
-            r.raise_for_status()
+            _raise_readable(r, var, model)
             text = "".join(b.get("text", "") for b in r.json().get("content", []))
         else:
             body = {"model": model, "max_tokens": 3000,
@@ -628,7 +694,7 @@ async def chat(message: str, scope: str, draft: dict[str, Any] | None,
                 body.pop("response_format", None)
                 r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
                                                 "Content-Type": "application/json"}, json=body)
-            r.raise_for_status()
+            _raise_readable(r, var, model)
             text = r.json()["choices"][0]["message"]["content"] or ""
 
     try:
@@ -668,3 +734,63 @@ async def chat(message: str, scope: str, draft: dict[str, Any] | None,
         reply += f" (Dropped {dropped} change{'s' if dropped > 1 else ''} aimed at pantry rows that don't exist.)"
 
     return ChatResponse(reply=reply, proposal=proposal, matched=matched, unmatched=unmatched)
+
+
+# ── diagnostics ─────────────────────────────────────────────────────────────
+async def probe() -> dict[str, Any]:
+    """One minimal real call. Returns what the provider actually said."""
+    prov = which_provider()
+    if not prov:
+        return {"ok": False, "error": "no API key set in .env"}
+    var, key, url, model = prov
+    try:
+        async with httpx.AsyncClient(timeout=30) as cl:
+            if var == "ANTHROPIC_API_KEY":
+                r = await cl.post(url, headers={"x-api-key": key,
+                                                "anthropic-version": "2023-06-01",
+                                                "content-type": "application/json"},
+                                  json={"model": model, "max_tokens": 8,
+                                        "messages": [{"role": "user", "content": "say ok"}]})
+            else:
+                r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
+                                                "Content-Type": "application/json"},
+                                  json={"model": model, "max_tokens": 8,
+                                        "messages": [{"role": "user", "content": "say ok"}]})
+            _raise_readable(r, var, model)
+        return {"ok": True, "provider": var.replace("_API_KEY", "").title(), "model": model}
+    except ProviderError as e:
+        return {"ok": False, "status": e.status, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}
+
+
+async def list_models() -> dict[str, Any]:
+    """Ask the provider which models this key may use.
+
+    A 404 on a model name is the most common way a working key looks broken,
+    and the only reliable cure is seeing the real list rather than guessing.
+    """
+    prov = which_provider()
+    if not prov:
+        return {"ok": False, "error": "no API key set in .env"}
+    var, key, url, model = prov
+    listing = url.rsplit("/chat/completions", 1)[0] + "/models"
+    if var == "ANTHROPIC_API_KEY":
+        listing, headers = "https://api.anthropic.com/v1/models", {
+            "x-api-key": key, "anthropic-version": "2023-06-01"}
+    else:
+        headers = {"Authorization": f"Bearer {key}"}
+    try:
+        async with httpx.AsyncClient(timeout=30) as cl:
+            r = await cl.get(listing, headers=headers)
+            _raise_readable(r, var, model)
+            body = r.json()
+        rows = body.get("data") or body.get("models") or []
+        names = sorted({str(m.get("id") or m.get("name", "")).split("/")[-1]
+                        for m in rows if isinstance(m, dict)})
+        return {"ok": True, "current": model, "current_is_available": model in names,
+                "available": names}
+    except ProviderError as e:
+        return {"ok": False, "status": e.status, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}

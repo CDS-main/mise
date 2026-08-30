@@ -134,6 +134,26 @@ Four things happen to a proposal before you ever see it:
 The worst a confused model can do here is waste your time. It cannot quietly
 change a number you never looked at. Verified: `tests/` exercises all four.
 
+### When the model doesn't answer
+
+`GET /api/assist/health?probe=1` makes one tiny real call and reports exactly
+what came back. `GET /api/assist/models` lists the model names your key can
+actually see. Both exist because "model call failed" is useless — you cannot
+tell a bad key from a retired model name from a rate limit without the
+provider's own words, so those words are what gets shown:
+
+```
+Gemini returned HTTP 404 for model 'gemini-2.5-flash' —
+models/gemini-2.5-flash is not found for API version v1beta
+(that model name doesn't exist for this key)
+```
+
+The **Check the model connection** button in the import panel runs both, and on
+a 404 it prints the list of models you could use instead.
+
+Import never hard-fails on a model error: it falls back to the local parser and
+tells you, in the warnings, why it had to.
+
 ### Import tiers
 
 Cheapest and most reliable first:

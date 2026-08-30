@@ -48,3 +48,49 @@ def test_multi_recipe_json_ld():
             '"recipeInstructions":"Rinse it well."}]}</script>')
     got = _all_json_ld(html)
     assert [r.name for r in got] == ["A", "B"]
+
+
+def test_vulgar_fractions_and_long_lines_parse():
+    """The lines a real recipe actually contains."""
+    from server.assistant import _parse_ing_line
+    cases = [
+        ("1 Chicken Breast, boneless, skinless. Thinly sliced (Can use thigh as well)", 1, "ea"),
+        ("1/4 White Onion, sliced (about 1/4 cup)", 0.25, "ea"),
+        ("1 Large Egg, whisked", 1, "ea"),           # not 'l' for litre
+        ("1 stalk Green Onion, thinly sliced", 1, "stalk"),
+        ("½ cup Dashi Broth (can use Hondashi seasoning)", 0.5, "cup"),
+        ("500g bread flour", 500, "g"),              # no space
+        ("1 1/2 cups water", 1.5, "cups"),
+    ]
+    for line, amt, unit in cases:
+        got = _parse_ing_line(line)
+        assert got is not None, f"dropped: {line}"
+        assert abs(got.amt - amt) < 1e-6, (line, got.amt)
+        assert got.unit == unit, (line, got.unit)
+
+
+def test_large_egg_is_not_a_litre():
+    """The bug this guards: 'l' matching inside 'Large'."""
+    from server.assistant import _parse_ing_line
+    got = _parse_ing_line("1 Large Egg, whisked")
+    assert got.name.startswith("Large"), got.name
+
+
+def test_counted_units_do_not_become_grams():
+    from server.assistant import to_base
+    assert to_base(2, "cloves") == (2, "ea")
+    assert to_base(1, "stalk") == (1, "ea")
+
+
+def test_provider_error_carries_the_reason():
+    import httpx
+    from server.assistant import ProviderError, _raise_readable
+    r = httpx.Response(404, json={"error": {"message": "models/nope is not found"}},
+                       request=httpx.Request("POST", "http://x"))
+    try:
+        _raise_readable(r, "GEMINI_API_KEY", "nope")
+        assert False, "should have raised"
+    except ProviderError as e:
+        assert e.status == 404
+        assert "not found" in str(e)
+        assert "doesn't exist" in str(e)      # the plain-language hint
