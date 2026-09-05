@@ -48,7 +48,7 @@ class Stage(BaseModel):
     @field_validator("medium")
     @classmethod
     def _medium(cls, v: str) -> str:
-        return v if v in MEDIUMS else "Stove top"
+        return coerce_medium(v)
 
 
 class Recipe(BaseModel):
@@ -88,6 +88,37 @@ class DraftIngredient(BaseModel):
     optional: bool = False
 
 
+# Models emit words that describe the *job* rather than the equipment —
+# "Assembly", "Serve", "None". They are not mediums, and letting them through
+# breaks everything downstream: the vessel list is keyed by medium, so an
+# unknown one leaves you unable to pick the bowl you own.
+MEDIUM_ALIASES = {
+    "none": "Bench", "": "Bench", "assembly": "Bench", "assemble": "Bench",
+    "serve": "Bench", "serving": "Bench", "plating": "Bench", "plate": "Bench",
+    "prep": "Bench", "preparation": "Bench", "counter": "Bench",
+    "bowl": "Bench", "hand": "Bench", "no heat": "Bench", "raw": "Bench",
+    "stovetop": "Stove top", "stove": "Stove top", "hob": "Stove top",
+    "pan": "Stove top", "saucepan": "Stove top", "skillet": "Stove top",
+    "baking": "Oven", "roast": "Oven", "grill": "Oven", "broil": "Oven",
+    "deep fry": "Fry", "frying": "Fry", "microwave oven": "Microwave",
+    "kettle": "Hot water", "boiling water": "Hot water",
+    "blender": "Blend", "food processor": "Blend", "stand mixer": "Mixer",
+}
+
+
+def coerce_medium(v: str) -> str:
+    v = (v or "").strip()
+    if v in MEDIUMS:
+        return v
+    lower = v.lower()
+    if lower in MEDIUM_ALIASES:
+        return MEDIUM_ALIASES[lower]
+    for m in MEDIUMS:                          # "Stove Top", "OVEN"
+        if m.lower() == lower:
+            return m
+    return "Bench"
+
+
 class DraftStage(BaseModel):
     name: str
     medium: str = "Stove top"
@@ -95,6 +126,11 @@ class DraftStage(BaseModel):
     needs: list[str] = []                     # names of other stages
     ing: list[DraftIngredient] = []
     steps: list[Step] = []
+
+    @field_validator("medium")
+    @classmethod
+    def _medium(cls, v: str) -> str:
+        return coerce_medium(v)
 
 
 class RecipeDraft(BaseModel):
@@ -178,20 +214,39 @@ class ShopOp(BaseModel):
     why: str = ""
 
 
+class Idea(BaseModel):
+    """A dish it thinks you could make. Deliberately NOT a recipe.
+
+    The model is good at "this sounds like what you're after and you have most
+    of it". It is not good at inventing quantities, and a hallucinated 340 g of
+    something would flow straight into your logs. So an idea carries a name, a
+    reason, and what you'd be missing — and getting the actual recipe is a
+    separate, sourced step you take yourself.
+    """
+    name: str = Field(max_length=90)
+    why: str = Field(default="", max_length=280)
+    cuisine: str = "Other"
+    mins: int = Field(default=30, ge=1, le=1440)
+    uses: list[str] = []                      # pantry names it leans on
+    missing: list[str] = []                   # what you'd need to buy
+    search: str = ""                          # a query that finds a real recipe
+
+
 class Proposal(BaseModel):
     summary: str
     pantry: list[PantryOp] = []
     shop: list[ShopOp] = []
     draft: RecipeDraft | None = None          # a fully revised draft, to diff
+    ideas: list[Idea] = Field(default=[], max_length=8)
     questions: list[str] = []                 # it needs something from you
 
     def is_empty(self) -> bool:
-        return not (self.pantry or self.shop or self.draft)
+        return not (self.pantry or self.shop or self.draft or self.ideas)
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
-    scope: Literal["draft", "pantry", "shop"] = "draft"
+    scope: Literal["draft", "pantry", "shop", "ideas"] = "draft"
     draft: dict[str, Any] | None = None       # the draft under review, if any
     history: list[dict[str, str]] = []        # [{role, content}], last few turns
 

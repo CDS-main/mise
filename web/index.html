@@ -239,6 +239,7 @@ const MEALS=["Breakfast","Brunch","Lunch","Dinner","Snack"];
 const CUISINES=["Italian","Korean","Japanese","Chinese","Middle Eastern","American","Spanish"];
 const THEMES=["Studio Ghibli","Adventure Time","Regular Show","Flapjack","Chowder",
   "King of the Hill","SpongeBob","ALF","Fraggle Rock","Other…"];
+const ALL_VESSELS=()=>[...new Set(Object.values(VESSELS).flat())];
 const VESSELS={"Bench":["Mixing bowl","Board"],"Stove top":["Saucepan","Frying pan","Stock pot"],
  "Oven":["Sheet tray","Loaf tin","Baking dish","Lidded pot"],"Fry":["Deep pan"],
  "Microwave":["Micro-safe bowl"],"Hot water":["Kettle","Heatproof jar"],
@@ -605,7 +606,8 @@ function renderDecide(){
   <div class="card pad col-sm"><span class="eyebrow">Cooking medium</span><div class="chips" id="cMedium"></div>
     <p class="note">Driven by the kit you own. Turn on the sous vide rig or the stand mixer on the Pantry tab and its medium appears here.</p></div>
   <button class="btn wide" id="find">Show me what I can cook</button>
-  <div class="col" id="results"></div>`;
+  <div class="col" id="results"></div>
+  ${assistPanel("ideas")}`;
   REELDEF.forEach(([k,,o])=>settle(k,["Any",...o()].indexOf(S.reels[k])));
   $$("[data-pin]").forEach(b=>b.onclick=()=>{S.pins[b.dataset.pin]=!S.pins[b.dataset.pin];save();renderDecide()});
   $$("[data-spin]").forEach(b=>b.onclick=()=>spinOne(b.dataset.spin));
@@ -617,6 +619,7 @@ function renderDecide(){
   chips("#cEffort",["Any","Under 30 min","An hour-ish","All evening"],o=>S.effort===o,o=>S.effort=o);
   chips("#cMedium",mediumsAvail(),o=>S.medium===o,o=>S.medium=o);
   $("#find").onclick=()=>{results();$("#results").scrollIntoView({behavior:"smooth"})};
+  wireAssist("ideas");
   results();
 }
 function chips(host,opts,get,set){
@@ -747,9 +750,10 @@ function renderBrief(){
      <div class="tw"><table><thead><tr><th>Stage</th><th>Medium</th><th>Vessel</th><th style="text-align:right">Own</th></tr></thead><tbody>
        ${C.r.stages.map((st,i)=>{const own=S.kit[st.vessel]??0;
          return `<tr><td>${esc(st.name)}</td><td class="note">${esc(st.medium)}</td>
-           <td><select data-bvessel="${i}">${(VESSELS[st.medium]||["Board"]).map(v=>
+           <td><select data-bvessel="${i}">${(VESSELS[st.medium]||ALL_VESSELS()).map(v=>
              `<option ${st.vessel===v?"selected":""}>${esc(v)}</option>`).join("")}</select></td>
-           <td class="n" style="color:${own<(vs[st.vessel]||1)?"var(--red)":"inherit"}">${own}</td></tr>`}).join("")}
+           <td class="n" style="color:${own<(vs[st.vessel]||1)?"var(--red)":"inherit"}"
+               title="${own?"":"You have this set to 0 in Pantry → Kit"}">${own}</td></tr>`}).join("")}
      </tbody></table></div>
      <p class="note">Changing one here changes it for this cook and saves it to the recipe. If two stages want the same vessel and you only own one, you can still cook — you just run them one after the other instead of together, and the board will say so.</p></div>
    <div class="card pad col-sm"><span class="eyebrow">Entry mode</span><div class="chips" id="cMode"></div>
@@ -1096,7 +1100,7 @@ function draftFromServer(res){
     taste:d.taste||"Savoury", mins:d.mins||30, servings:d.servings||null,
     notes:d.notes||"", confidence:d.confidence||"medium",
     basis:"", stages:(d.stages||[]).map(st=>({
-      name:st.name||"Everything", medium:st.medium||"Stove top",
+      name:st.name||"Everything", medium:VESSELS[st.medium]?st.medium:"Bench",
       vessel:st.vessel||"Saucepan", needs:st.needs||[],
       ing:(st.ing||[]).map(g=>{ const mm=m[k++]||{};
         return {raw:g.raw||g.name, name:g.name, noun:mm.noun||g.name,
@@ -1231,7 +1235,7 @@ function draftForm(p){
      <div class="card pad col-sm" style="margin-top:6px">
        <div class="row"><input data-sname="${si}" value="${esc(st.name)}" placeholder="Stage name" style="flex:1;min-width:140px">
          <select data-smedium="${si}">${Object.keys(VESSELS).map(c=>`<option ${st.medium===c?"selected":""}>${c}</option>`).join("")}</select>
-         <select data-svessel="${si}">${(VESSELS[st.medium]||["Board"]).map(c=>`<option ${st.vessel===c?"selected":""}>${c}</option>`).join("")}</select>
+         <select data-svessel="${si}">${(VESSELS[st.medium]||ALL_VESSELS()).map(c=>`<option ${st.vessel===c?"selected":""}>${esc(c)}</option>`).join("")}</select>
          ${p.stages.length>1?`<button class="btn ghost sm" data-sdel="${si}">Remove stage</button>`:""}</div>
        ${p.stages.length>1?`<p class="note">Runs after: ${st.needs.length?esc(st.needs.join(", ")):"nothing — it can start immediately"}</p>`:""}
        <div class="tw"><table><thead><tr><th>Source line</th><th style="text-align:right">Amount</th><th>Unit</th><th>Maps to</th><th>Basis</th><th></th></tr></thead><tbody>
@@ -1276,7 +1280,7 @@ function wireDraft(){
     p.stages[a].ing.splice(k,1);renderBook()});
   $$("[data-sname]").forEach(i=>i.oninput=()=>p.stages[+i.dataset.sname].name=i.value);
   $$("[data-smedium]").forEach(sel=>sel.onchange=()=>{const st=p.stages[+sel.dataset.smedium];
-    st.medium=sel.value;st.vessel=(VESSELS[st.medium]||["Board"])[0];renderBook()});
+    st.medium=sel.value;st.vessel=(VESSELS[st.medium]||ALL_VESSELS())[0];renderBook()});
   $$("[data-svessel]").forEach(sel=>sel.onchange=()=>p.stages[+sel.dataset.svessel].vessel=sel.value);
   $$("[data-ssteps]").forEach(t=>t.oninput=()=>p.stages[+t.dataset.ssteps].steps=
     t.value.split(/\n/).map(x=>x.trim()).filter(Boolean));
@@ -1394,7 +1398,7 @@ function deleteRecipe(id){
  * ════════════════════════════════════════════════════════════════════════ */
 function assistPanel(scope){
   scope = scope || "draft";
-  const D = scope==="draft" ? DRAFT : ASSIST;
+  const D = scope==="draft" ? DRAFT : ASSISTS[scope];
   if(!D) return "";
   const busy=D.busy?"disabled":"";
   // Every view is in the DOM at once — they're shown and hidden, not swapped —
@@ -1413,7 +1417,8 @@ function assistPanel(scope){
 function assistHint(scope){
   return {draft:"“the yeast should be 7 g”, “split the sauce into its own stage”, “this is 4 portions”",
     pantry:"“I used about half the olive oil”, “the yoghurt expires Friday”",
-    shop:"“what am I short of for focaccia?”, “add pantry staples I'm low on”"}[scope]
+    shop:"“what am I short of for focaccia?”, “add pantry staples I'm low on”",
+    ideas:"“something Japanese with what I've got”, “use up the yoghurt”, “quick, one pan, no shop”"}[scope]
     ||"ask for a change";
 }
 
@@ -1432,6 +1437,28 @@ function proposalDiff(pr,scope){
   (pr.shop||[]).forEach(op=>rows.push(
     `<li><b>shopping list</b> — ${esc(op.name)}${op.qty!=null?` (${op.qty} ${esc(op.unit||"")})`:""}${op.why?` <span class="note">— ${esc(op.why)}</span>`:""}</li>`));
   if(pr.draft) rows.push(`<li><b>this recipe</b> — ${draftDelta(pr.draft)}</li>`);
+
+  // Ideas are not a change-set. There is nothing to apply — the point is that
+  // you go and fetch a REAL recipe, because a model inventing "340 g" is
+  // exactly the thing this system is built not to trust.
+  if((pr.ideas||[]).length) return `<div class="card pad col-sm">
+    <span class="eyebrow">Ideas — nothing to apply, these are starting points</span>
+    <p class="why">${esc(pr.summary||"")}</p>
+    <div class="col">${pr.ideas.map(i=>`<div class="sug"><div class="edge"></div><div class="sug-in">
+      <div class="between"><h3>${esc(i.name)}</h3>
+        <span class="row" style="gap:8px"><span class="tag">${esc(i.cuisine||"Other")}</span>
+          <span class="tag">${i.mins||30} min</span></span></div>
+      <p class="why">${esc(i.why||"")}</p>
+      ${(i.uses||[]).length?`<div class="tags"><span class="note">uses</span>${i.uses.map(u=>`<span class="tag g">${esc(u)}</span>`).join("")}</div>`:""}
+      ${(i.missing||[]).length?`<div class="tags"><span class="note">you'd need</span>${i.missing.map(u=>`<span class="tag a">${esc(u)}</span>`).join("")}</div>`:""}
+      <div class="row" style="margin-top:8px">
+        <a class="btn ghost sm" target="_blank" rel="noopener"
+           href="https://duckduckgo.com/?q=${encodeURIComponent((i.search||i.name)+" recipe")}">Find a recipe</a>
+        <button class="btn ghost sm" data-ideaimport="${esc(i.search||i.name)}">Import one</button>
+        ${(i.missing||[]).length?`<button class="btn ghost sm" data-ideashop="${esc((i.missing||[]).join("|"))}">Add what's missing to the list</button>`:""}
+      </div></div></div>`).join("")}</div>
+    <p class="note">Deliberately not a recipe. The model is good at "this sounds right and you have most of it"; it is bad at quantities, and an invented 340 g would end up in your logs. Fetch a real one and import it.</p>
+    <div class="row"><button class="btn ghost sm" id="aDrop-${scope}">Clear</button></div></div>`;
 
   if((pr.questions||[]).length && !rows.length)
     return `<div class="card pad col-sm"><span class="eyebrow">It needs to know</span>
@@ -1466,15 +1493,20 @@ function draftDelta(nd){
   return bits.length?bits.join("; "):"no visible difference";
 }
 
-let ASSIST={scope:"pantry",chat:[],proposal:null,busy:false};
+/* One assistant, four scopes. Each keeps its own conversation, because "use up
+ * the yoghurt" on Decide and "the yeast should be 7 g" on a draft are not the
+ * same thread and shouldn't share history. */
+const ASSISTS={pantry:{chat:[],proposal:null,busy:false},
+               shop:{chat:[],proposal:null,busy:false},
+               ideas:{chat:[],proposal:null,busy:false}};
 
 function wireAssist(scope){
   scope = scope || "draft";
-  const D = scope==="draft" ? DRAFT : ASSIST;
+  const D = scope==="draft" ? DRAFT : ASSISTS[scope];
   if(!D) return;
   const send=$("#aSend-"+scope), box=$("#aMsg-"+scope);
   if(!send||!box) return;
-  const go=async()=>{
+  const ask=async()=>{
     const msg=(box.value||"").trim(); if(!msg) return;
     if(!serverUp()) return toast("The assistant needs the server — the Pi isn't reachable");
     D.chat=D.chat||[]; D.chat.push({role:"user",content:msg});
@@ -1491,8 +1523,23 @@ function wireAssist(scope){
     }
     D.busy=false; rerenderScope(scope);
   };
-  send.onclick=go;
-  box.onkeydown=e=>{ if(e.key==="Enter"){e.preventDefault();go()} };
+  send.onclick=ask;
+  box.onkeydown=e=>{ if(e.key==="Enter"){e.preventDefault();ask()} };
+  $$("[data-ideaimport]").forEach(b=>b.onclick=()=>{
+    DRAFT=newDraft(); DRAFT.hint=b.dataset.ideaimport;
+    go("book");
+    toast("Paste the recipe you found, or drop the link in");
+  });
+  $$("[data-ideashop]").forEach(b=>b.onclick=()=>{
+    S.extras=S.extras||[]; let n=0;
+    b.dataset.ideashop.split("|").filter(Boolean).forEach(name=>{
+      const id=guessPantry(name);
+      if(id){ S.basket=S.basket||[]; if(!S.basket.includes(id)){S.basket.push(id);n++} }
+      else if(!S.extras.some(x=>x.name.toLowerCase()===name.toLowerCase())){
+        S.extras.push({name,qty:null,unit:"",why:"for an idea you liked"});n++}
+    });
+    save(); renderShop(); toast(n?`Added ${n} to the list`:"Already on the list");
+  });
   const ap=$("#aApply-"+scope), dr=$("#aDrop-"+scope);
   if(ap) ap.onclick=()=>applyProposal(D,scope);
   if(dr) dr.onclick=()=>{D.proposal=null;rerenderScope(scope)};
@@ -1500,6 +1547,7 @@ function wireAssist(scope){
 function rerenderScope(scope){
   if(scope==="pantry") renderPantry();
   else if(scope==="shop") renderShop();
+  else if(scope==="ideas") renderDecide();
   else renderBook();
 }
 
@@ -1556,7 +1604,6 @@ async function applyProposal(D,scope){
 
 /* ══ PANTRY ══ */
 function renderPantry(){
-  ASSIST.scope="pantry";
   const rows=Object.values(S.pantry).sort((a,b)=>
     (a.expires?days(a.expires):9999)-(b.expires?days(b.expires):9999));
   $("#v-pantry").innerHTML=`
@@ -1631,7 +1678,6 @@ function intakeRun(){
 
 /* ══ SHOP ══ */
 function renderShop(){
-  ASSIST.scope="shop";
   const low=lowStock(),unl=unlocks(),inB=id=>S.basket.includes(id);
   const line=(id,right,sub)=>`<div class="shopitem"><input type="checkbox" data-b="${id}" ${inB(id)?"checked":""}>
     <div><b>${esc(nm(id))}</b> <span class="nl">${esc(nlOf(id))}</span>${sub?`<div class="note">${sub}</div>`:""}</div>

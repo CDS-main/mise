@@ -259,3 +259,53 @@ def test_sharing_a_qualifier_group_is_not_a_conflict():
     assert _conflicts({"green", "onion"}, {"yellow", "onion"})
     assert _conflicts({"chicken", "breast"}, {"chicken", "stock"})
     assert _conflicts({"unsalted", "butter"}, {"salted", "butter"})
+
+
+def test_every_public_entry_point_exists():
+    """A refactor once deleted chat() outright and nothing noticed until a
+    person clicked Ask and got AttributeError. This is that tripwire."""
+    from server import assistant, main
+    for name in ["chat", "adapt", "call_model", "call_provider", "build_drafts",
+                 "build_draft", "resolve", "match_pantry", "probe", "list_models",
+                 "fix_vessels", "which_provider", "provider_warning",
+                 "regex_draft", "youtube_transcript", "ingredient_noun"]:
+        assert callable(getattr(assistant, name, None)), f"assistant.{name} is missing"
+    paths = {r.path for r in main.app.routes}
+    for route in ["/api/state", "/api/import", "/api/assist/chat", "/api/assist/health",
+                  "/api/assist/models", "/api/cooks", "/api/pantry/{item_id}"]:
+        assert route in paths, f"route {route} is missing"
+
+
+def test_job_words_are_not_mediums():
+    """"Assembly" and "None" are jobs, not equipment. Letting them through left
+    the vessel picker with one option, so you couldn't choose the bowl you own."""
+    from server.models import coerce_medium, MEDIUMS, DraftStage
+    for junk in ["None", "", "Assembly", "Serve", "Plating", "nonsense"]:
+        assert coerce_medium(junk) == "Bench", junk
+    assert coerce_medium("stovetop") == "Stove top"
+    assert coerce_medium("OVEN") == "Oven"
+    assert coerce_medium("blender") == "Blend"
+    for m in MEDIUMS:
+        assert coerce_medium(m) == m
+    assert DraftStage(name="Assembly", medium="None").medium == "Bench"
+
+
+def test_ideas_are_not_recipes():
+    """An idea carries no quantities, by construction — that's the point."""
+    from server.models import Idea
+    i = Idea(name="Oyakodon", why="you have eggs and rice", mins=25,
+             uses=["Eggs"], missing=["Dashi"], search="oyakodon recipe")
+    assert not hasattr(i, "ing") and not hasattr(i, "stages")
+
+
+def test_chat_returns_ideas_without_inventing_quantities():
+    """Ideas carry names and reasons. Never amounts — that's the whole point."""
+    from server.models import Proposal
+    pr = Proposal.model_validate({
+        "summary": "using the eggs",
+        "ideas": [{"name": "Oyakodon", "why": "you have eggs and rice",
+                   "cuisine": "Japanese", "mins": 25, "uses": ["Eggs"],
+                   "missing": ["Dashi"], "search": "oyakodon recipe"}]})
+    assert not pr.is_empty()
+    assert pr.ideas[0].name == "Oyakodon"
+    assert pr.pantry == [] and pr.shop == [] and pr.draft is None

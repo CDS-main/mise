@@ -885,6 +885,116 @@ async def adapt(recipe: dict[str, Any], instruction: str, pantry_names: list[str
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     return json.loads(text[text.find("{"):text.rfind("}") + 1])
 
+# ── the assistant: it proposes, you approve, Python applies ─────────────────
+#
+# The model is handed a read-only snapshot and returns a `Proposal`. It has no
+# write endpoint, no database handle, and no way to reach one. Applying a
+# proposal is the browser replaying it through the ordinary endpoints — the same
+# ones your own clicks use — so there is one write path in the system and it is
+# the audited one.
+CHAT_SYSTEM = """You are the assistant inside Mise, a kitchen system. You help the
+cook fix recipe drafts, correct their pantry, build a shopping list, and decide
+what to cook.
+
+YOU CANNOT CHANGE ANYTHING DIRECTLY. You return a PROPOSAL. The cook reads it as
+a diff and clicks apply or discard. So:
+- Propose the smallest change that does the job. Never restate things you are
+  not changing.
+- Every operation carries a short `why`. If you cannot justify it from what the
+  cook said or from the data you were given, do not propose it.
+- If you are missing something you need — which of two pantry rows they meant,
+  what size their tin is — put it in `questions` and propose nothing. Asking is
+  cheaper than a wrong guess they have to spot.
+- Never invent quantities. If the cook says "I bought more flour", ask how much.
+- `reply` is one or two sentences of plain speech. The diff shows the detail; do
+  not narrate it line by line.
+
+A question with no change to make — "what am I short of for focaccia?", "what
+can I do with what's turning?" — is answered in `reply` alone, with an empty
+proposal. Answering is not the same as proposing.
+
+Scope rules:
+- ideas  — the cook wants suggestions for what to make. Return 4-6 `ideas`.
+           An idea is a DISH, not a recipe: a name, one sentence of `why`, the
+           pantry items it `uses`, what's `missing`, and a `search` string that
+           would find a real recipe for it. NEVER invent quantities or steps —
+           the cook fetches the real recipe and imports it, which is the only
+           way the numbers in their logs stay trustworthy. Lean hard on what
+           they already own and on anything close to expiring. Say plainly when
+           an idea needs a shop.
+- draft  — you may return a full revised `draft`. Keep every field you were not
+           asked to change byte-identical. Amounts stay in the units given.
+- pantry — use `pantry` ops. `id` must be a real id from the snapshot. Use `add`
+           only for something genuinely not there.
+- shop   — use `shop` ops. Names only, plus a quantity if the cook gave one.
+
+Return ONLY the JSON object, no prose, no code fence."""
+
+
+def _pantry_snapshot(pantry: dict[str, dict[str, Any]], limit: int = 140) -> list[dict]:
+    """What the model is allowed to see. Ids, names, quantities — nothing else."""
+    return [{"id": pid, "name": it.get("name"), "qty": it.get("qty"),
+             "unit": it.get("unit"), "expires": it.get("expires")}
+            for pid, it in list(pantry.items())[:limit]]
+
+
+async def chat(message: str, scope: str, draft: dict[str, Any] | None,
+               history: list[dict[str, str]], pantry: dict[str, dict[str, Any]]
+               ) -> ChatResponse:
+    if not which_provider():
+        raise RuntimeError("no-api-key")
+
+    context: dict[str, Any] = {"scope": scope, "pantry": _pantry_snapshot(pantry)}
+    if draft:
+        context["draft"] = draft
+    user = (f"Context (read-only):\n{json.dumps(context)[:11000]}\n\n"
+            f"The cook says: {message}\n\n"
+            f"Match this JSON schema exactly:\n{_proposal_hint()}\n\n"
+            f"When you return a `draft`, it must match:\n{_schema_hint()}")
+
+    msgs = [{"role": h.get("role", "user")[:9], "content": str(h.get("content", ""))[:2000]}
+            for h in history[-6:]]
+    msgs.append({"role": "user", "content": user})
+
+    text = await call_provider(CHAT_SYSTEM, msgs)
+
+    try:
+        data = json.loads(_raw_json(text))
+    except Exception:
+        # It answered in prose instead of JSON. That's a miss, not a crash —
+        # show the cook what it said and propose nothing.
+        return ChatResponse(reply=(text.strip()[:600] or "It didn't answer.") +
+                            "\n\n(That wasn't a change I could act on — nothing proposed.)")
+
+    reply = str(data.pop("reply", "") or data.get("summary", "") or "Here's what I'd change.")
+
+    # The gate. A proposal that doesn't fit the schema is discarded entirely
+    # rather than half-applied — you get the sentence, not a broken change-set.
+    try:
+        proposal = Proposal.model_validate(data)
+    except Exception as e:
+        return ChatResponse(reply=f"{reply}\n\n(I couldn't put that into a valid change — "
+                                  f"{type(e).__name__}. Nothing was proposed.)")
+
+    if proposal.is_empty() and not proposal.questions:
+        return ChatResponse(reply=reply)
+
+    matched, unmatched = [], []
+    if proposal.draft:
+        matched, unmatched = resolve(proposal.draft, pantry)
+
+    # Drop pantry ops pointing at rows that don't exist. A hallucinated id is
+    # the single most likely failure here, and it should never reach the diff.
+    kept = [op for op in proposal.pantry if op.op == "add" or (op.id and op.id in pantry)]
+    dropped = len(proposal.pantry) - len(kept)
+    proposal.pantry = kept
+    if dropped:
+        reply += (f" (Dropped {dropped} change{'s' if dropped > 1 else ''} aimed at "
+                  "pantry rows that don't exist.)")
+
+    return ChatResponse(reply=reply, proposal=proposal, matched=matched, unmatched=unmatched)
+
+
 # ── diagnostics ─────────────────────────────────────────────────────────────
 async def probe() -> dict[str, Any]:
     """One minimal real call. Returns what the provider actually said."""

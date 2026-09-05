@@ -77,6 +77,19 @@ Two things deliberately bypass that path because they must never be lost:
 | `POST /api/cooks` | Append-only. A logged cook is data you cannot recreate. |
 | `PATCH /api/pantry/{id}` | Single-row read-modify-write under a lock. What the scale and the intake flow use. |
 
+### Ideas are not recipes
+
+`scope: "ideas"` on the Decide tab answers "what should I make?" with 4-6
+dishes — a name, why it suits what you have, what it uses, what you'd need to
+buy, and a search string. **It never returns quantities or steps.**
+
+That line is deliberate. A model is good at "this sounds like what you want and
+you own most of it" and bad at "340 g". An invented quantity would flow into the
+cook log and quietly corrupt the dataset the project exists to collect. So an
+idea is a starting point: **Find a recipe** searches the web, **Import one**
+opens the import screen with the dish prefilled as a hint, and the numbers come
+from a real source through the tiered importer, where they can be reviewed.
+
 ### Nothing blocks a cook
 
 Missing an ingredient, or short a pan, never prevents you starting. It can't:
