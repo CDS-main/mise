@@ -423,8 +423,11 @@ class ProviderError(Exception):
     """
     def __init__(self, provider: str, model: str, status: int, detail: str):
         self.status, self.detail = status, detail
-        super().__init__(f"{provider} returned HTTP {status} for model "
-                         f"'{model}' — {detail}")
+        # status 200 means the call succeeded and the *answer* was the problem;
+        # "returned HTTP 200" would read as nonsense, so let the detail speak.
+        msg = detail if status == 200 else (
+            f"{provider} returned HTTP {status} for model '{model}' — {detail}")
+        super().__init__(msg)
 
 
 def _raise_readable(r: "httpx.Response", var: str, model: str) -> None:
@@ -460,6 +463,27 @@ def _retry_after(r: "httpx.Response", attempt: int) -> float:
     return 1.5 * (2 ** attempt)          # 1.5s, 3s, 6s
 
 
+def _reasoning_effort(model: str) -> str | None:
+    """How hard to let the model think before answering.
+
+    Gemini 2.5 can switch thinking off entirely; Gemini 3.x cannot, so ask for
+    the minimum. This matters because reasoning tokens are spent from the SAME
+    budget as the reply — a model that thinks for 3000 tokens under a 3000-token
+    cap returns an empty answer, which is indistinguishable from a broken one
+    unless you know to look for it.
+
+    Turning structured extraction into a reasoning problem is also the wrong
+    trade: reading amounts off a recipe does not need deliberation, it needs
+    the budget spent on output.
+    """
+    m = model.lower()
+    if m.startswith("gemini-2.5"):
+        return "none"
+    if m.startswith("gemini-"):
+        return "low"
+    return None
+
+
 async def _one_call(cl: "httpx.AsyncClient", var: str, key: str, url: str, model: str,
                     system: str, messages: list[dict], max_tokens: int,
                     want_json: bool) -> "httpx.Response":
@@ -473,11 +497,14 @@ async def _one_call(cl: "httpx.AsyncClient", var: str, key: str, url: str, model
                             "messages": [{"role": "system", "content": system}] + messages}
     if want_json:
         body["response_format"] = {"type": "json_object"}
+    effort = _reasoning_effort(model)
+    if effort:
+        body["reasoning_effort"] = effort
     return await cl.post(url, headers={"Authorization": f"Bearer {key}",
                                        "Content-Type": "application/json"}, json=body)
 
 
-async def call_provider(system: str, messages: list[dict], max_tokens: int = 3000,
+async def call_provider(system: str, messages: list[dict], max_tokens: int = 8000,
                         info: dict[str, Any] | None = None) -> str:
     """Every model call in Mise goes through here. Returns the raw text.
 
@@ -497,10 +524,14 @@ async def call_provider(system: str, messages: list[dict], max_tokens: int = 300
 
     last_r: "httpx.Response | None" = None
     last_model = model
+    empty_note: str | None = None
+    base_tokens = max_tokens
     async with httpx.AsyncClient(timeout=90) as cl:
         for m in models:
             want_json = var != "ANTHROPIC_API_KEY"
-            for attempt in range(MAX_ATTEMPTS):
+            stretched = False
+            max_tokens = base_tokens        # each model starts from the same budget
+            for attempt in range(MAX_ATTEMPTS + 1):
                 r = await _one_call(cl, var, key, url, m, system, messages,
                                     max_tokens, want_json)
                 if r.status_code == 400 and want_json:
@@ -511,18 +542,51 @@ async def call_provider(system: str, messages: list[dict], max_tokens: int = 300
                                         max_tokens, False)
                 last_r, last_model = r, m
                 if r.is_success:
-                    if info is not None:
-                        info.update(model=m, attempts=attempt + 1, fallback=(m != model))
                     body = r.json()
                     if var == "ANTHROPIC_API_KEY":
-                        return "".join(b.get("text", "") for b in body.get("content", []))
-                    return body["choices"][0]["message"]["content"] or ""
+                        text = "".join(b.get("text", "") for b in body.get("content", []))
+                        reason = body.get("stop_reason", "")
+                    else:
+                        ch = (body.get("choices") or [{}])[0]
+                        text = (ch.get("message") or {}).get("content") or ""
+                        reason = ch.get("finish_reason", "")
+                    if text.strip():
+                        if info is not None:
+                            info.update(model=m, attempts=attempt + 1,
+                                        fallback=(m != model), budget=max_tokens)
+                        return text
+                    # Empty body with a length stop = the whole budget went on
+                    # reasoning. Give it room once rather than reporting a
+                    # failure the cook can do nothing about.
+                    if reason in ("length", "max_tokens", "MAX_TOKENS") and not stretched:
+                        stretched = True
+                        max_tokens *= 4
+                        continue
+                    who = "Gemini" if var == "GEMINI_API_KEY" else var.split("_")[0].title()
+                    if reason in ("length", "max_tokens", "MAX_TOKENS"):
+                        empty_note = (
+                            f"{who} model '{m}' answered with nothing — it spent its "
+                            f"whole {max_tokens:,}-token budget reasoning and had none "
+                            "left to write the reply with.")
+                    else:
+                        empty_note = (f"{who} model '{m}' returned an empty answer "
+                                      f"(finish_reason: {reason or 'unknown'}).")
+                    break
                 if r.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS - 1:
                     await asyncio.sleep(_retry_after(r, attempt))
                     continue
                 break
+            if last_r is not None and last_r.is_success:
+                continue         # it answered, but emptily — try the next model
             if last_r is not None and last_r.status_code not in RETRY_STATUS:
                 break            # a 401 or 404 will not fix itself on another model
+
+    if empty_note:
+        if len(models) > 1:
+            empty_note += (f" Every model I tried did the same ({', '.join(models)}), "
+                           "which points at the prompt or the provider rather than the "
+                           "model choice.")
+        raise ProviderError(var.replace("_API_KEY", "").title(), last_model, 200, empty_note)
     _raise_readable(last_r, var, last_model)   # always raises
     raise RuntimeError("unreachable")
 
@@ -585,7 +649,7 @@ def regex_draft(text: str) -> RecipeDraft:
         stages=[DraftStage(name="Everything", ing=ings,
                            steps=[{"t": s["t"], "mins": s["mins"]} for s in steps] or
                            [{"t": "Cook it.", "mins": 10}])],
-        notes="Parsed by the local regex fallback — no model key configured. Check every row.",
+        notes="Parsed by the local regex parser here on the Pi, not by a model. It only understands lines that start with a number, so check every row.",
         confidence="low")
 
 

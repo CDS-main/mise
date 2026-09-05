@@ -184,3 +184,28 @@ def test_backoff_grows_and_honours_retry_after():
     absurd = httpx.Response(429, headers={"retry-after": "9999"},
                             request=httpx.Request("POST", "http://x"))
     assert _retry_after(absurd, 0) == 20.0        # capped; never hang the import
+
+
+def test_reasoning_is_minimised_or_disabled_per_model():
+    """Reading amounts off a recipe is extraction, not deliberation.
+
+    Gemini 3.x cannot switch thinking off, so ask for the least. 2.5 can, so
+    switch it off entirely. Nothing else gets the parameter at all.
+    """
+    from server.assistant import _reasoning_effort
+    assert _reasoning_effort("gemini-2.5-flash") == "none"
+    assert _reasoning_effort("gemini-2.5-flash-lite") == "none"
+    assert _reasoning_effort("gemini-3.6-flash") == "low"
+    assert _reasoning_effort("gemini-3.5-flash-lite") == "low"
+    assert _reasoning_effort("llama-3.3-70b-versatile") is None
+    assert _reasoning_effort("gpt-4o-mini") is None
+    assert _reasoning_effort("claude-sonnet-4-5") is None
+
+
+def test_empty_answer_error_reads_as_an_answer_problem_not_an_http_one():
+    from server.assistant import ProviderError
+    e = ProviderError("Gemini", "gemini-3.6-flash", 200, "it answered with nothing")
+    assert "HTTP 200" not in str(e)
+    assert str(e) == "it answered with nothing"
+    http = ProviderError("Gemini", "x", 404, "no such model")
+    assert "HTTP 404" in str(http)

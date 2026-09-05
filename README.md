@@ -152,6 +152,26 @@ busy for two seconds is the wrong call. So every model call goes through
 A **permanent** error is raised on the first attempt. A 404 will not fix itself
 on the twelfth try, and retrying it just burns your quota.
 
+### Thinking models and the empty answer
+
+Gemini 3.x reasons before it replies, and **reasoning tokens come out of the
+same budget as the answer**. Under a 3000-token cap the model can spend the lot
+thinking and return an empty string — which surfaces as
+`ValueError: model returned no JSON object` and looks exactly like a broken
+setup. It isn't; it's a budget that was too small for a model that thinks.
+
+Two things follow:
+
+- `reasoning_effort` is set per model — `"none"` for Gemini 2.5 (which can turn
+  thinking off) and `"low"` for 3.x (which cannot). Reading amounts off a recipe
+  is extraction, not deliberation; the budget belongs in the output.
+- The default budget is 8000 tokens, and an empty answer with
+  `finish_reason: length` is retried **once** at four times that before moving on.
+
+If every model still comes back empty, the error says so plainly and names what
+was tried, because at that point the problem is the prompt or the provider, not
+the model you picked.
+
 ### When the model doesn't answer
 
 `GET /api/assist/health?probe=1` makes one tiny real call and reports exactly
