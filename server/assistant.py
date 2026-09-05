@@ -15,6 +15,7 @@ pantry matching. Anything numeric that ends up in your logs came from code.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -350,6 +351,21 @@ PROVIDERS = {
                           "gpt-4o-mini"),
 }
 
+# Free tiers get busy. A 503 "high demand" is not a broken setup, it is a queue,
+# and falling straight through to the regex parser because a server was busy for
+# two seconds is the wrong call. So: retry with backoff, then try a smaller
+# sibling model, which is usually far less contended than the flagship.
+FALLBACKS = {
+    "GEMINI_API_KEY":   ["gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"],
+    "GROQ_API_KEY":     ["llama-3.1-8b-instant"],
+    "CEREBRAS_API_KEY": ["llama3.1-8b"],
+    "OPENAI_API_KEY":   ["gpt-4o-mini"],
+}
+
+# Statuses that mean "ask again later", not "you did it wrong".
+RETRY_STATUS = {408, 429, 500, 502, 503, 504}
+MAX_ATTEMPTS = 3
+
 
 # A model name belongs to exactly one vendor. MISE_MODEL left over from a
 # previous provider is the single most confusing failure mode here: the key is
@@ -424,8 +440,91 @@ def _raise_readable(r: "httpx.Response", var: str, model: str) -> None:
     hint = {401: " (the key is wrong or not activated)",
             403: " (the key is rejected — check it's enabled for this API)",
             404: " (that model name doesn't exist for this key)",
-            429: " (you've hit the free-tier rate limit — wait and retry)"}.get(r.status_code, "")
+            429: " (you've hit the free-tier rate limit — wait and retry)",
+            500: " (the provider had an internal error — not your setup)",
+            502: " (the provider is having trouble — not your setup)",
+            503: " (the provider is overloaded right now — nothing is wrong with "
+                 "your setup, it usually clears within a few minutes)",
+            504: " (the provider timed out — try again shortly)"}.get(r.status_code, "")
     raise ProviderError(provider, model, r.status_code, str(detail)[:300] + hint)
+
+
+def _retry_after(r: "httpx.Response", attempt: int) -> float:
+    """Honour the server's own advice if it gave any, else back off."""
+    hdr = r.headers.get("retry-after")
+    if hdr:
+        try:
+            return min(float(hdr), 20.0)
+        except ValueError:
+            pass
+    return 1.5 * (2 ** attempt)          # 1.5s, 3s, 6s
+
+
+async def _one_call(cl: "httpx.AsyncClient", var: str, key: str, url: str, model: str,
+                    system: str, messages: list[dict], max_tokens: int,
+                    want_json: bool) -> "httpx.Response":
+    if var == "ANTHROPIC_API_KEY":
+        return await cl.post(url, headers={"x-api-key": key,
+                                           "anthropic-version": "2023-06-01",
+                                           "content-type": "application/json"},
+                             json={"model": model, "max_tokens": max_tokens,
+                                   "system": system, "messages": messages})
+    body: dict[str, Any] = {"model": model, "max_tokens": max_tokens,
+                            "messages": [{"role": "system", "content": system}] + messages}
+    if want_json:
+        body["response_format"] = {"type": "json_object"}
+    return await cl.post(url, headers={"Authorization": f"Bearer {key}",
+                                       "Content-Type": "application/json"}, json=body)
+
+
+async def call_provider(system: str, messages: list[dict], max_tokens: int = 3000,
+                        info: dict[str, Any] | None = None) -> str:
+    """Every model call in Mise goes through here. Returns the raw text.
+
+    Retries transient failures, then falls back to a smaller sibling model
+    before giving up. A permanent error (bad key, unknown model) is raised
+    immediately — retrying that just wastes your time and the free tier's.
+
+    Pass `info` to find out what actually happened: which model answered, how
+    many attempts it took, and whether it had to drop to a fallback. Silently
+    using a different model than you configured would be a lie by omission.
+    """
+    prov = which_provider()
+    if not prov:
+        raise RuntimeError("no-api-key")
+    var, key, url, model = prov
+    models = [model] + [m for m in FALLBACKS.get(var, []) if m != model]
+
+    last_r: "httpx.Response | None" = None
+    last_model = model
+    async with httpx.AsyncClient(timeout=90) as cl:
+        for m in models:
+            want_json = var != "ANTHROPIC_API_KEY"
+            for attempt in range(MAX_ATTEMPTS):
+                r = await _one_call(cl, var, key, url, m, system, messages,
+                                    max_tokens, want_json)
+                if r.status_code == 400 and want_json:
+                    # this provider doesn't do forced JSON mode. the prompt asks
+                    # for bare JSON anyway, and the extractors cope either way.
+                    want_json = False
+                    r = await _one_call(cl, var, key, url, m, system, messages,
+                                        max_tokens, False)
+                last_r, last_model = r, m
+                if r.is_success:
+                    if info is not None:
+                        info.update(model=m, attempts=attempt + 1, fallback=(m != model))
+                    body = r.json()
+                    if var == "ANTHROPIC_API_KEY":
+                        return "".join(b.get("text", "") for b in body.get("content", []))
+                    return body["choices"][0]["message"]["content"] or ""
+                if r.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS - 1:
+                    await asyncio.sleep(_retry_after(r, attempt))
+                    continue
+                break
+            if last_r is not None and last_r.status_code not in RETRY_STATUS:
+                break            # a 401 or 404 will not fix itself on another model
+    _raise_readable(last_r, var, last_model)   # always raises
+    raise RuntimeError("unreachable")
 
 
 def _build_prompt(source_text: str, hint: str | None) -> str:
@@ -457,45 +556,11 @@ def _extract_drafts(text: str) -> list[RecipeDraft]:
         return [RecipeDraft.model_validate_json(blob)]      # it ignored the wrapper
 
 
-async def call_model(source_text: str, hint: str | None = None) -> list[RecipeDraft]:
-    prov = which_provider()
-    if not prov:
-        raise RuntimeError("no-api-key")
-    var, key, url, model = prov
-    user = _build_prompt(source_text, hint)
-
-    async with httpx.AsyncClient(timeout=90) as cl:
-        if var == "ANTHROPIC_API_KEY":
-            r = await cl.post(url, headers={
-                "x-api-key": key, "anthropic-version": "2023-06-01",
-                "content-type": "application/json"},
-                json={"model": model, "max_tokens": 3000, "system": SYSTEM,
-                      "messages": [{"role": "user", "content": user}]})
-            _raise_readable(r, var, model)
-            body = r.json()
-            text = "".join(b.get("text", "") for b in body.get("content", []))
-        else:
-            payload = {
-                "model": model,
-                "max_tokens": 3000,
-                "messages": [{"role": "system", "content": SYSTEM},
-                             {"role": "user", "content": user}],
-                "response_format": {"type": "json_object"},
-            }
-            r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
-                                            "Content-Type": "application/json"},
-                              json=payload)
-            if r.status_code == 400:
-                # not every provider supports forced JSON mode. the prompt already
-                # asks for bare JSON, and _extract_drafts copes either way.
-                payload.pop("response_format", None)
-                r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
-                                                "Content-Type": "application/json"},
-                                  json=payload)
-            _raise_readable(r, var, model)
-            body = r.json()
-            text = body["choices"][0]["message"]["content"] or ""
-
+async def call_model(source_text: str, hint: str | None = None,
+                     info: dict[str, Any] | None = None) -> list[RecipeDraft]:
+    text = await call_provider(SYSTEM, [{"role": "user",
+                                         "content": _build_prompt(source_text, hint)}],
+                               info=info)
     return _extract_drafts(text)
 
 
@@ -532,8 +597,13 @@ async def build_drafts(url: str | None, text: str | None, hint: str | None
 
     async def model_or_regex(src: str, prov: str, why_regex: str
                              ) -> tuple[list[RecipeDraft], str, list[str]]:
+        info: dict[str, Any] = {}
         try:
-            return await call_model(src, hint), prov, warnings
+            drafts = await call_model(src, hint, info=info)
+            if info.get("fallback"):
+                warnings.append(f"Your usual model was busy, so this was read by "
+                                f"'{info['model']}' instead.")
+            return drafts, prov, warnings
         except RuntimeError:
             warnings.append(why_regex)
             return [regex_draft(src)], "regex", warnings
@@ -636,167 +706,14 @@ has, say so in `summary` and return an empty `changes` list."""
 
 
 async def adapt(recipe: dict[str, Any], instruction: str, pantry_names: list[str]) -> dict[str, Any]:
-    prov = which_provider()
-    if not prov:
+    if not which_provider():
         raise RuntimeError("no-api-key")
-    var, key, url, model = prov
     payload = {"recipe": recipe, "instruction": instruction, "in_pantry": pantry_names[:120]}
-    content = json.dumps(payload)[:12000]
-
-    async with httpx.AsyncClient(timeout=90) as cl:
-        if var == "ANTHROPIC_API_KEY":
-            r = await cl.post(url, headers={"x-api-key": key,
-                                            "anthropic-version": "2023-06-01",
-                                            "content-type": "application/json"},
-                              json={"model": model, "max_tokens": 1500,
-                                    "system": ADAPT_SYSTEM,
-                                    "messages": [{"role": "user", "content": content}]})
-            _raise_readable(r, var, model)
-            text = "".join(b.get("text", "") for b in r.json().get("content", []))
-        else:
-            body = {"model": model, "max_tokens": 1500,
-                    "messages": [{"role": "system", "content": ADAPT_SYSTEM},
-                                 {"role": "user", "content": content}],
-                    "response_format": {"type": "json_object"}}
-            r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
-                                            "Content-Type": "application/json"}, json=body)
-            if r.status_code == 400:
-                body.pop("response_format", None)
-                r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
-                                                "Content-Type": "application/json"}, json=body)
-            _raise_readable(r, var, model)
-            text = r.json()["choices"][0]["message"]["content"] or ""
-
+    text = await call_provider(ADAPT_SYSTEM,
+                               [{"role": "user", "content": json.dumps(payload)[:12000]}],
+                               max_tokens=1500)
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     return json.loads(text[text.find("{"):text.rfind("}") + 1])
-
-
-# ── the assistant: it proposes, you approve, Python applies ─────────────────
-#
-# This is the same principle as the import path, extended to actions. The model
-# is handed a read-only snapshot and returns a `Proposal`. It has no write
-# endpoint, no database handle, and no way to reach one. Applying a proposal is
-# the browser replaying it through the ordinary endpoints — the same ones your
-# own clicks use — so there is exactly one write path in the system and it is
-# the audited one.
-#
-# The practical consequence: the worst a confused model can do is waste your
-# time. It cannot silently change a quantity you did not look at.
-CHAT_SYSTEM = """You are the assistant inside Mise, a kitchen system. You help the
-cook fix recipe drafts, correct their pantry, and build a shopping list.
-
-YOU CANNOT CHANGE ANYTHING DIRECTLY. You return a PROPOSAL. The cook reads it as
-a diff and clicks apply or discard. So:
-- Propose the smallest change that does the job. Never restate things you are
-  not changing.
-- Every operation carries a short `why`. If you cannot justify it from what the
-  cook said or from the data you were given, do not propose it.
-- If you are missing something you need — which of two pantry rows they meant,
-  what size their tin is — put it in `questions` and propose nothing. Asking is
-  cheaper than a wrong guess they have to spot.
-- Never invent quantities. If the cook says "I bought more flour", ask how much.
-- `reply` is one or two sentences of plain speech. The diff shows the detail;
-  do not narrate it line by line.
-
-Scope rules:
-- draft  — you may return a full revised `draft`. Keep every field you were not
-           asked to change byte-identical. Amounts stay in the units given.
-- pantry — use `pantry` ops. `id` must be a real id from the snapshot. Use
-           `add` only for something genuinely not there.
-- shop   — use `shop` ops. Names only, plus a quantity if the cook gave one.
-
-Return ONLY the JSON object, no prose, no code fence."""
-
-
-def _pantry_snapshot(pantry: dict[str, dict[str, Any]], limit: int = 140) -> list[dict]:
-    """What the model is allowed to see. Ids, names, quantities — nothing else."""
-    rows = []
-    for pid, it in list(pantry.items())[:limit]:
-        rows.append({"id": pid, "name": it.get("name"), "qty": it.get("qty"),
-                     "unit": it.get("unit"), "expires": it.get("expires")})
-    return rows
-
-
-async def chat(message: str, scope: str, draft: dict[str, Any] | None,
-               history: list[dict[str, str]], pantry: dict[str, dict[str, Any]]
-               ) -> ChatResponse:
-    prov = which_provider()
-    if not prov:
-        raise RuntimeError("no-api-key")
-    var, key, url, model = prov
-
-    context: dict[str, Any] = {"scope": scope, "pantry": _pantry_snapshot(pantry)}
-    if draft:
-        context["draft"] = draft
-    user = (f"Context (read-only):\n{json.dumps(context)[:11000]}\n\n"
-            f"The cook says: {message}\n\n"
-            f"Match this JSON schema exactly:\n{_proposal_hint()}\n\n"
-            f"When you return a `draft`, it must match:\n{_schema_hint()}")
-
-    msgs = [{"role": h.get("role", "user")[:9], "content": str(h.get("content", ""))[:2000]}
-            for h in history[-6:]]
-    msgs.append({"role": "user", "content": user})
-
-    async with httpx.AsyncClient(timeout=90) as cl:
-        if var == "ANTHROPIC_API_KEY":
-            r = await cl.post(url, headers={"x-api-key": key,
-                                            "anthropic-version": "2023-06-01",
-                                            "content-type": "application/json"},
-                              json={"model": model, "max_tokens": 3000,
-                                    "system": CHAT_SYSTEM, "messages": msgs})
-            _raise_readable(r, var, model)
-            text = "".join(b.get("text", "") for b in r.json().get("content", []))
-        else:
-            body = {"model": model, "max_tokens": 3000,
-                    "messages": [{"role": "system", "content": CHAT_SYSTEM}] + msgs,
-                    "response_format": {"type": "json_object"}}
-            r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
-                                            "Content-Type": "application/json"}, json=body)
-            if r.status_code == 400:
-                body.pop("response_format", None)
-                r = await cl.post(url, headers={"Authorization": f"Bearer {key}",
-                                                "Content-Type": "application/json"}, json=body)
-            _raise_readable(r, var, model)
-            text = r.json()["choices"][0]["message"]["content"] or ""
-
-    try:
-        data = json.loads(_raw_json(text))
-    except Exception:
-        # It answered in prose instead of JSON. That's a miss, not a crash —
-        # show the cook what it said and propose nothing.
-        return ChatResponse(reply=(text.strip()[:600] or "It didn't answer.") +
-                            "\n\n(That wasn't a change I could act on — nothing proposed.)")
-    reply = str(data.pop("reply", "") or data.get("summary", "") or "Here's what I'd change.")
-
-    # The gate. A proposal that doesn't fit the schema is discarded entirely
-    # rather than half-applied — you get the sentence, not a broken change-set.
-    proposal: Proposal | None = None
-    try:
-        proposal = Proposal.model_validate(data)
-    except Exception as e:
-        return ChatResponse(reply=f"{reply}\n\n(I couldn't put that into a valid change — "
-                                  f"{type(e).__name__}. Nothing was proposed.)")
-
-    if proposal.is_empty() and not proposal.questions:
-        return ChatResponse(reply=reply)
-
-    matched, unmatched = [], []
-    if proposal.draft:
-        matched, unmatched = resolve(proposal.draft, pantry)
-
-    # Drop pantry ops pointing at rows that don't exist. A hallucinated id is
-    # the single most likely failure here, and it should never reach the diff.
-    kept = []
-    for op in proposal.pantry:
-        if op.op == "add" or (op.id and op.id in pantry):
-            kept.append(op)
-    dropped = len(proposal.pantry) - len(kept)
-    proposal.pantry = kept
-    if dropped:
-        reply += f" (Dropped {dropped} change{'s' if dropped > 1 else ''} aimed at pantry rows that don't exist.)"
-
-    return ChatResponse(reply=reply, proposal=proposal, matched=matched, unmatched=unmatched)
-
 
 # ── diagnostics ─────────────────────────────────────────────────────────────
 async def probe() -> dict[str, Any]:
@@ -819,7 +736,9 @@ async def probe() -> dict[str, Any]:
                                   json={"model": model, "max_tokens": 8,
                                         "messages": [{"role": "user", "content": "say ok"}]})
             _raise_readable(r, var, model)
-        return {"ok": True, "provider": var.replace("_API_KEY", "").title(), "model": model}
+        return {"ok": True, "provider": var.replace("_API_KEY", "").title(),
+                "model": model,
+                "fallbacks": [m for m in FALLBACKS.get(var, []) if m != model]}
     except ProviderError as e:
         return {"ok": False, "status": e.status, "error": str(e)}
     except Exception as e:

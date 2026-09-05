@@ -149,3 +149,38 @@ def test_long_ingredient_lines_are_not_demoted_to_steps():
     assert len(ing) == 3, [g.name for g in ing]
     assert ing[0].name.startswith("Chicken Breast")
     assert len(d.stages[0].steps) == 1
+
+
+def test_transient_statuses_are_retryable_and_permanent_ones_are_not():
+    from server.assistant import RETRY_STATUS
+    for transient in (429, 500, 502, 503, 504):
+        assert transient in RETRY_STATUS
+    for permanent in (400, 401, 403, 404, 422):
+        assert permanent not in RETRY_STATUS
+
+
+def test_overload_error_says_it_is_not_your_fault():
+    import httpx
+    from server.assistant import ProviderError, _raise_readable
+    r = httpx.Response(503, json={"error": {"message": "high demand"}},
+                       request=httpx.Request("POST", "http://x"))
+    try:
+        _raise_readable(r, "GEMINI_API_KEY", "gemini-3.6-flash")
+        assert False
+    except ProviderError as e:
+        assert "overloaded" in str(e)
+        assert "nothing is wrong with your setup" in str(e)
+
+
+def test_backoff_grows_and_honours_retry_after():
+    import httpx
+    from server.assistant import _retry_after
+    plain = httpx.Response(503, request=httpx.Request("POST", "http://x"))
+    waits = [_retry_after(plain, i) for i in range(3)]
+    assert waits == sorted(waits) and waits[0] < waits[-1]
+    told = httpx.Response(429, headers={"retry-after": "4"},
+                          request=httpx.Request("POST", "http://x"))
+    assert _retry_after(told, 0) == 4.0
+    absurd = httpx.Response(429, headers={"retry-after": "9999"},
+                            request=httpx.Request("POST", "http://x"))
+    assert _retry_after(absurd, 0) == 20.0        # capped; never hang the import

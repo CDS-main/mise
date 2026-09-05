@@ -134,6 +134,24 @@ Four things happen to a proposal before you ever see it:
 The worst a confused model can do here is waste your time. It cannot quietly
 change a number you never looked at. Verified: `tests/` exercises all four.
 
+### Retries and fallback
+
+Free tiers get busy. `503 This model is currently experiencing high demand` is a
+queue, not a broken setup, and dropping to the regex parser because a server was
+busy for two seconds is the wrong call. So every model call goes through
+`call_provider`, which:
+
+1. retries transient statuses (408, 429, 500, 502, 503, 504) up to three times,
+   backing off 1.5s → 3s → 6s, honouring `Retry-After` when the server sends one
+   (capped at 20s so an import can never hang);
+2. then tries a smaller sibling model — flagship models are the contended ones,
+   and `gemini-3.5-flash-lite` is usually free when `gemini-3.7-flash` is not;
+3. and tells you in the warnings when a fallback answered, because silently
+   using a different model than you configured is a lie by omission.
+
+A **permanent** error is raised on the first attempt. A 404 will not fix itself
+on the twelfth try, and retrying it just burns your quota.
+
 ### When the model doesn't answer
 
 `GET /api/assist/health?probe=1` makes one tiny real call and reports exactly
