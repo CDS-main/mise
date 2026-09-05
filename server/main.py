@@ -213,7 +213,7 @@ async def import_recipe(body: ImportRequest) -> ImportResponse:
     pick = body.choose if body.choose is not None else 0
     if not 0 <= pick < len(drafts):
         raise HTTPException(422, f"choose must be 0..{len(drafts) - 1}")
-    draft = drafts[pick]
+    draft = assistant.fix_vessels(drafts[pick])
 
     pantry = db.get_state()["pantry"]
     matched, unmatched = assistant.resolve(draft, pantry)

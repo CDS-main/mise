@@ -209,3 +209,53 @@ def test_empty_answer_error_reads_as_an_answer_problem_not_an_http_one():
     assert str(e) == "it answered with nothing"
     http = ProviderError("Gemini", "x", 404, "no such model")
     assert "HTTP 404" in str(http)
+
+
+PANTRY = {p: {"id": p, "name": n} for p, n in [
+    ("stock", "Chicken stock"), ("thighs", "Chicken thighs"),
+    ("yonion", "Yellow onion"), ("eggs", "Eggs"), ("soy", "Soy sauce"),
+    ("sesoil", "Sesame oil"), ("sugar", "Caster sugar"),
+    ("rice", "Short-grain rice"), ("flour", "Bread flour"),
+    ("olive", "Olive oil"), ("butter", "Salted butter"),
+    ("toms", "Tinned tomatoes"), ("plain", "Plain flour"),
+]}
+
+
+def test_a_wrong_match_is_worse_than_no_match():
+    """These all matched confidently and WRONGLY before the qualifier rule."""
+    from server.assistant import match_pantry
+    for name in ["Chicken Breast, boneless, skinless. Thinly sliced",
+                 "Green Onion, thinly sliced",
+                 "White Onion, sliced",
+                 "Dashi Broth",
+                 "Toasted Sesame Seeds",
+                 "unsalted butter"]:
+        pid, score = match_pantry(name, PANTRY)
+        assert pid is None, f"{name} wrongly matched {PANTRY[pid]['name']} at {score}"
+
+
+def test_real_matches_still_land():
+    from server.assistant import match_pantry
+    for name, want in [("Soy Sauce", "soy"), ("Sesame Oil", "sesoil"),
+                       ("Large Egg, whisked", "eggs"), ("2 eggs", "eggs"),
+                       ("Japanese Short Grain Rice, cooked", "rice"),
+                       ("bread flour", "flour"), ("plain flour", "plain"),
+                       ("chicken thighs", "thighs"), ("tinned tomatoes", "toms"),
+                       ("salted butter", "butter"), ("olive oil", "olive")]:
+        pid, score = match_pantry(name, PANTRY)
+        assert pid == want, f"{name} -> {pid} (wanted {want}) at {score}"
+
+
+def test_singular_and_plural_are_the_same_shelf_item():
+    from server.assistant import _norm
+    assert _norm("Eggs") == _norm("1 Large Egg, whisked").replace("1 ", "")
+    assert _norm("tomatoes") == "tomato"
+
+
+def test_sharing_a_qualifier_group_is_not_a_conflict():
+    """Two oils are both oils — that's agreement, not disagreement."""
+    from server.assistant import _conflicts
+    assert not _conflicts({"sesame", "oil"}, {"olive", "oil"})
+    assert _conflicts({"green", "onion"}, {"yellow", "onion"})
+    assert _conflicts({"chicken", "breast"}, {"chicken", "stock"})
+    assert _conflicts({"unsalted", "butter"}, {"salted", "butter"})

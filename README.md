@@ -77,6 +77,37 @@ Two things deliberately bypass that path because they must never be lost:
 | `POST /api/cooks` | Append-only. A logged cook is data you cannot recreate. |
 | `PATCH /api/pantry/{id}` | Single-row read-modify-write under a lock. What the scale and the intake flow use. |
 
+### Nothing blocks a cook
+
+Missing an ingredient, or short a pan, never prevents you starting. It can't:
+the whole point is to log what actually happened, and "I made it with 140 g
+instead of 200 g" is a data point, while "I didn't cook because the app said no"
+is nothing. Short stock and short vessels are stated plainly on the brief screen
+and the Begin button is never disabled.
+
+Vessels are pickable per stage on that same screen, and the choice is saved back
+to the recipe — you own what you own, and you shouldn't re-pick the bowl every
+time you cook the same thing.
+
+### Pantry matching: a wrong match is worse than no match
+
+An unmatched row shows amber and you fix it in two seconds. A confidently
+*wrong* one silently logs chicken stock as the chicken breast you weighed, and
+poisons the dataset this whole project exists to collect. So `match_pantry` is
+deliberately conservative:
+
+- shared words carry the score, not string similarity — "green onion" and
+  "yellow onion" are one character apart and different ingredients;
+- a raw fuzzy ratio only wins alone when it is near-identical (≥ 0.86);
+- names are singularised and stripped of preparation, so "1 Large Egg, whisked"
+  and "Eggs" are the same shelf item;
+- and if two names disagree on a **distinguishing word** — colour, part, form,
+  salted vs unsalted — the match is refused outright however similar the strings
+  look. Sharing a group is fine: two oils are both oils.
+
+The threshold is 0.6. `tests/` pins the six real cases that used to match wrongly
+and the eleven that must keep matching.
+
 ### Getting a key — free is fine
 
 The assistant does one small job (messy text → structured JSON), so it does not

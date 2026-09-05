@@ -80,35 +80,114 @@ def ingredient_noun(name: str) -> str:
     return out or name
 
 
+# Words that describe how an ingredient was prepared or sized. They are noise
+# for matching: "1 Large Egg, whisked" and "Eggs" are the same shelf item.
+NOISE = re.compile(
+    r"\b(fresh|freshly|dried|ground|chopped|sliced|minced|grated|whisked|beaten|"
+    r"shredded|crushed|peeled|cubed|diced|halved|quartered|trimmed|rinsed|drained|"
+    r"cooked|toasted|boneless|skinless|softened|melted|thinly|finely|roughly|"
+    r"coarsely|large|small|medium|whole|optional|of|the|a|an)\b")
+
+
+def _singular(tok: str) -> str:
+    """Crude but sufficient: eggs -> egg, tomatoes -> tomato, leaves stays."""
+    if len(tok) > 4 and tok.endswith("ies"):
+        return tok[:-3] + "y"
+    if len(tok) > 4 and tok.endswith("oes"):
+        return tok[:-2]
+    if len(tok) > 3 and tok.endswith("s") and not tok.endswith("ss"):
+        return tok[:-1]
+    return tok
+
+
 def _norm(s: str) -> str:
     s = unicodedata.normalize("NFKD", s.lower())
     s = "".join(c for c in s if not unicodedata.combining(c))
-    s = re.sub(r"\b(fresh|dried|ground|chopped|sliced|minced|large|small|medium|whole|of|the|a|an)\b", " ", s)
-    return re.sub(r"[^a-z0-9 ]+", " ", s).strip()
+    s = NOISE.sub(" ", s)
+    s = re.sub(r"[^a-z0-9 ]+", " ", s)
+    return " ".join(_singular(t) for t in s.split()).strip()
+
+
+# Words that separate two things sharing a head noun, grouped by what they
+# distinguish. Two names conflict when they both carry a word from the SAME
+# group and those words differ — "green onion" vs "yellow onion" is a colour
+# disagreement, "salted" vs "unsalted" a salt one. Sharing a group harmlessly
+# ("sesame oil" and "olive oil" are both oils) is not a conflict.
+QUALIFIER_GROUPS = {
+    "colour":   {"green", "yellow", "white", "red", "purple"},
+    # which PART of the animal or plant — a breast, a thigh, or the stock you
+    # boiled the bones into are all "chicken" and none of them substitute
+    "part":     {"breast", "thigh", "wing", "leg", "mince", "fillet",
+                 "stock", "broth", "bone"},
+    # what FORM it takes — the juice, the zest and the oil of the same fruit
+    # are three different things on three different shelves
+    "form":     {"powder", "paste", "sauce", "oil", "vinegar", "flour",
+                 "seed", "zest", "juice", "leave", "root", "syrup"},
+    "dairy":    {"milk", "cream", "butter", "cheese", "yoghurt", "yogurt"},
+    "salt":     {"salted", "unsalted"},
+    "richness": {"double", "single", "skimmed", "semi"},
+    "flourtype": {"plain", "self", "raising", "wholemeal", "bread", "strong"},
+    "sugar":    {"caster", "icing", "granulated", "muscovado"},
+    "grain":    {"short", "long", "basmati", "arborio"},
+    "cure":     {"smoked", "unsmoked", "cured", "fresh"},
+}
+QUALIFIER_OF = {}
+for _g, _words in QUALIFIER_GROUPS.items():
+    for _w in _words:
+        QUALIFIER_OF.setdefault(_w, _g)
+
+
+def _conflicts(a: set[str], b: set[str]) -> bool:
+    """True when the two names disagree on something that distinguishes them."""
+    for group in QUALIFIER_GROUPS:
+        ga = {t for t in a if QUALIFIER_OF.get(t) == group}
+        gb = {t for t in b if QUALIFIER_OF.get(t) == group}
+        if ga and gb and not (ga & gb):
+            return True
+    return False
 
 
 def match_pantry(name: str, pantry: dict[str, dict[str, Any]]) -> tuple[str | None, float]:
-    """Return (pantry_id, score 0-1). Exact token overlap beats fuzzy ratio."""
+    """Return (pantry_id, score 0-1).
+
+    A WRONG match is worse than no match. An unmatched row is amber and you fix
+    it in two seconds; a confidently wrong one silently logs chicken stock as
+    the chicken breast you weighed, and poisons the dataset the whole project
+    exists to collect. So this is deliberately conservative:
+
+      - shared words carry the score, not string similarity. "green onion" and
+        "yellow onion" are one character apart and different ingredients;
+      - a raw fuzzy ratio can only win on its own if it is very high;
+      - and if the names disagree on a distinguishing word — colour, cut, form,
+        salted vs unsalted — the match is refused outright, however similar the
+        strings look.
+    """
     n = _norm(name)
     if not n:
         return None, 0.0
     ntok = set(n.split())
     best, best_score = None, 0.0
     for pid, item in pantry.items():
-        cands = [item.get("name", ""), item.get("nl", ""), item.get("tag", "")]
-        for cand in cands:
+        for cand in (item.get("name", ""), item.get("nl", ""), item.get("tag", "")):
             c = _norm(cand)
             if not c:
                 continue
             ctok = set(c.split())
-            overlap = len(ntok & ctok) / max(1, len(ctok))
+
+            if _conflicts(ntok, ctok):
+                continue                     # "breast" vs "stock" — not the same thing
+
+            shared = ntok & ctok
+            overlap = len(shared) / max(1, min(len(ntok), len(ctok)))
             ratio = SequenceMatcher(None, n, c).ratio()
-            score = max(overlap * 0.95, ratio)
-            if c and (c in n or n in c):
-                score = max(score, 0.9)
+
+            # string similarity alone is only trusted when it is near-identical
+            score = max(overlap * 0.95, ratio if ratio >= 0.86 else ratio * 0.6)
+            if shared and (c in n or n in c):
+                score = max(score, 0.9)      # one name contains the other, whole
             if score > best_score:
                 best, best_score = pid, score
-    return (best, round(best_score, 3)) if best_score >= 0.55 else (None, round(best_score, 3))
+    return (best, round(best_score, 3)) if best_score >= 0.6 else (None, round(best_score, 3))
 
 
 # ── tier 1: JSON-LD ─────────────────────────────────────────────────────────
@@ -308,6 +387,8 @@ Rules you must not break:
   two stages with no dependency; finishing the pasta in the sauce is a third that
   needs both. Do not invent parallelism that isn't there — a single-pan dish is
   one stage.
+- Pick the `vessel` from what the stage physically does. A stage that mixes,
+  whisks or combines happens in a bowl, not on a board; a board is for cutting.
 - Pick `basis_name`: the ingredient everything else scales from. For baking this
   is the flour. For a braise it is the meat. For pasta it is the pasta.
 - Set confidence honestly. "low" if the source was vague or you had to guess.
@@ -734,6 +815,31 @@ async def build_draft(url: str | None, text: str | None, hint: str | None
     """Back-compat single-draft wrapper."""
     drafts, prov, warns = await build_drafts(url, text, hint)
     return drafts[0], prov, warns
+
+
+# What a stage does decides what it happens in. A bench stage that says "mix in
+# a bowl" and gets assigned a chopping board isn't just cosmetically wrong — the
+# cook board counts vessels to warn about conflicts, so a wrong vessel invents a
+# conflict you don't have, or hides one you do.
+VESSEL_HINTS = [
+    (r"\b(mix|whisk|beat|combine|stir together|dissolve|marinate|toss|dress)\b",
+     "Bench", "Mixing bowl"),
+    (r"\b(chop|slice|dice|mince|cut|julienne|trim|carve)\b", "Bench", "Board"),
+    (r"\b(fry|sear|saut|brown|sizzle)\b", "Stove top", "Frying pan"),
+    (r"\b(boil|simmer|reduce|poach|blanch)\b", "Stove top", "Saucepan"),
+    (r"\b(roast|bake)\b", "Oven", "Sheet tray"),
+]
+
+
+def fix_vessels(draft: RecipeDraft) -> RecipeDraft:
+    """Correct an obviously wrong vessel from what the steps actually say."""
+    for st in draft.stages:
+        text = " ".join(x.t if hasattr(x, "t") else str(x) for x in st.steps).lower()
+        for pattern, medium, vessel in VESSEL_HINTS:
+            if st.medium == medium and re.search(pattern, text):
+                st.vessel = vessel
+                break
+    return draft
 
 
 def resolve(draft: RecipeDraft, pantry: dict[str, dict[str, Any]]
